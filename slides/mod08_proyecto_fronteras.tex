@@ -1,0 +1,85 @@
+% ============================================================
+% MÓDULO 8: PROYECTO FINAL Y FRONTERAS DEL RL
+% ============================================================
+\section{M8 · Proyecto y Fronteras}
+\module{Módulo 8: Proyecto Integrador y Fronteras}{Diagnóstico experimental, diseño de recompensas y el camino hacia el RL moderno}
+
+\begin{frame}{El Proyecto Final: OptiBot en el Almacén Dinámico}
+  \begin{columns}[c,onlytextwidth]
+    \column{0.50\textwidth}
+      \textbf{El Desafío de Integración:}
+      \begin{itemize}
+        \item Ponemos a prueba a OptiBot en un entorno que cambia en tiempo real:
+        \begin{itemize}
+          \item Estantes móviles y pasillos bloqueados.
+          \item Zonas de batería baja y estaciones de recarga.
+          \item Pedidos urgentes con ventanas de entrega estrictas.
+        \end{itemize}
+        \item \textbf{Evaluación Comparativa:}
+        \begin{enumerate}
+          \item Política Aleatoria (Línea base)
+          \item Q-Learning Tabular (Módulo 6)
+          \item Deep Q-Network (Módulo 7)
+        \end{enumerate}
+      \end{itemize}
+    \column{0.48\textwidth}
+      \centering
+      \begin{tikzpicture}[x=0.075cm,y=0.050cm]
+        \draw[-{Latex},SoftText] (0,0) -- (55,0) node[right,font=\tiny] {Episodios};
+        \draw[-{Latex},SoftText] (0,-10) -- (0,55) node[above,font=\tiny] {Recompensa media};
+        % Aleatorio
+        \draw[SoftText,dashed,line width=1pt] (0,-5) -- (50,-5) node[right,font=\tiny] {Aleatorio};
+        % Q-Learning Tabular
+        \draw[Gold!90!Ink,line width=1.5pt] (0,-8) .. controls (10,5) and (25,25) .. (50,30) node[right,font=\tiny] {Tabular};
+        % DQN
+        \draw[Teal,line width=2pt] (0,-8) .. controls (15,-5) and (25,35) .. (50,48) node[right,font=\tiny] {DQN};
+      \end{tikzpicture}
+  \end{columns}
+  \vspace{0.3cm}
+  \keyidea{El agente DQN demuestra capacidad de adaptación ante configuraciones no vistas durante el entrenamiento.}
+\end{frame}
+
+\begin{frame}{Diagnóstico y Patologías Comunes en RL}
+  \begin{columns}[T,onlytextwidth]
+    \column{0.48\textwidth}
+      \begin{alertblock}{¿Por qué no aprende mi agente?}
+        \begin{itemize}
+          \item \textbf{Exploración insuficiente:} $\varepsilon$ decayó demasiado rápido; el agente nunca descubrió la meta.
+          \item \textbf{Recompensas demasiado dispersas (sparse):} Si sólo hay $+100$ al final de 1,000 pasos, el gradiente no fluye.
+          \item \textbf{Tasa de aprendizaje inestable:} Pérdida que oscila salvajemente o diverge a $\infty$.
+        \end{itemize}
+      \end{alertblock}
+    \column{0.48\textwidth}
+      \begin{block}{El Peligro del Reward Hacking}
+        Si recompensamos a OptiBot por ``no colisionar'', el robot puede decidir \textbf{quedarse completamente quieto}.\\
+        \vspace{0.2cm}
+        \textbf{Lección de diseño:}
+        El agente no maximiza lo que tú \emph{deseas} que haga; maximiza estricta y despiadadamente la función matemática que \emph{programaste}.
+      \end{block}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{Fronteras: Del Control Discreto al RL Moderno}
+  \begin{columns}[T,onlytextwidth]
+    \column{0.32\textwidth}
+      \begin{block}{Policy Gradients}
+        \textbf{REINFORCE y PPO}\\
+        \vspace{0.15cm}
+        Optimizan directamente la política $\pi_\theta(a \mid s)$ sin tabla Q. Esencial para controlar brazos robóticos en espacios continuos.
+      \end{block}
+    \column{0.32\textwidth}
+      \begin{alertblock}{Actor-Critic}
+        \textbf{A2C, SAC, TD3}\\
+        \vspace{0.15cm}
+        Combinan un Actor (política que decide) con un Crítico (función de valor que evalúa el error TD). Máxima eficiencia muestral.
+      \end{alertblock}
+    \column{0.32\textwidth}
+      \begin{exampleblock}{RLHF en LLMs}
+        \textbf{Alineación de Modelos}\\
+        \vspace{0.15cm}
+        El aprendizaje por refuerzo con feedback humano es el motor que alinea ChatGPT, Claude y Gemini hacia respuestas útiles y seguras.
+      \end{exampleblock}
+  \end{columns}
+  \vspace{0.4cm}
+  \keyidea{Todos estos avances avanzados se fundamentan en los mismos tres pilares que dominaste: \textbf{Probabilidad, Bellman y Bootstrapping}.}
+\end{frame}

@@ -1,0 +1,199 @@
+\documentclass[11pt,a4paper]{report}
+
+% ------------------------------------------------------------
+% Plantilla de Documento / Libro: Aprendizaje por Refuerzo
+% De la Probabilidad a las Redes Neuronales
+% Compatible con pdfLaTeX. Identidad visual unificada con las diapositivas.
+% ------------------------------------------------------------
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish,es-nodecimaldot]{babel}
+\usepackage[scaled=0.95]{helvet}
+\renewcommand{\familydefault}{\sfdefault}
+\usepackage{microtype}
+\usepackage{amsmath,amssymb,mathtools}
+\usepackage{booktabs,array}
+\usepackage{geometry}
+\geometry{
+  top=2.8cm,
+  bottom=2.8cm,
+  left=2.7cm,
+  right=2.7cm,
+  headheight=32pt
+}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{listings}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,calc,positioning,shapes.geometric}
+\usepackage[most]{tcolorbox}
+\usepackage{hyperref}
+
+% ---------- Paleta de colores institucional ----------
+\definecolor{Ink}{HTML}{102A43}       % Texto principal y títulos
+\definecolor{Paper}{HTML}{FFFFFF}     % Fondo de página
+\definecolor{Mist}{HTML}{D9E2EC}      % Gris azulado para bordes y separadores
+\definecolor{Teal}{HTML}{005EA8}      % Azul primario institucional
+\definecolor{TealDark}{HTML}{003E73}  % Azul profundo
+\definecolor{Coral}{HTML}{D9480F}     % Naranja/coral de énfasis e ideas clave
+\definecolor{Gold}{HTML}{B77900}      % Ámbar para recompensas y alertas
+\definecolor{Leaf}{HTML}{2F6F44}      % Verde para ejemplos y resultados
+\definecolor{CodeBg}{HTML}{0B1D33}    % Fondo oscuro de código
+\definecolor{SoftText}{HTML}{486581}  % Texto secundario y notas
+\definecolor{LightBg}{HTML}{F0F4F8}   % Fondo tenue para cajas de texto
+
+% ---------- Configuración de hipervínculos ----------
+\hypersetup{
+  colorlinks=true,
+  linkcolor=Teal,
+  citecolor=Leaf,
+  urlcolor=Coral,
+  pdftitle={Aprendizaje por Refuerzo: De la Probabilidad a las Redes Neuronales},
+  pdfauthor={Curso Especializado de RL}
+}
+
+% ---------- Encabezados y pies de página ----------
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0.6pt}
+\renewcommand{\footrulewidth}{0.4pt}
+\renewcommand{\headrule}{\hbox to\headwidth{\color{Mist}\leaders\hrule height \headrulewidth\hfill}}
+\renewcommand{\footrule}{\hbox to\headwidth{\color{Mist}\leaders\hrule height \footrulewidth\hfill}}
+
+% Formato limpio de marca de capítulo (sin mayúsculas forzadas que saturan el ancho)
+\renewcommand{\chaptermark}[1]{\markboth{Capítulo \thechapter.\ #1}{}}
+
+% Encabezados con anchos delimitados para evitar cualquier sobreposición de texto
+\fancyhead[L]{\parbox[b]{0.32\linewidth}{\raggedright\footnotesize\color{SoftText}\textit{Aprendizaje por Refuerzo}}}
+\fancyhead[R]{\parbox[b]{0.65\linewidth}{\raggedleft\footnotesize\color{Teal}\bfseries\nouppercase{\leftmark}}}
+
+\fancyfoot[C]{\small\color{Ink}\thepage}
+\fancyfoot[R]{\tikz[baseline=-0.5ex]{\fill[Teal](0,0) circle (1.5pt);\fill[Coral](4pt,0) circle (1.5pt);\fill[Gold](8pt,0) circle (1.5pt);}}
+
+% ---------- Estilo de Capítulos y Secciones ----------
+\titleformat{\chapter}[display]
+  {\normalfont\sffamily\bfseries\color{TealDark}}
+  {\filleft\fontsize{48}{54}\selectfont\color{Mist}\thechapter}
+  {1ex}
+  {\titlerule[1.5pt]\vspace{1ex}\filright\fontsize{22}{26}\selectfont\color{Ink}}
+  [\vspace{1ex}{\titlerule[0.8pt]}]
+
+\titleformat{\section}
+  {\normalfont\Large\bfseries\color{Teal}}
+  {\thesection}{1em}{}[\color{Mist}\titlerule]
+
+\titleformat{\subsection}
+  {\normalfont\large\bfseries\color{Ink}}
+  {\thesubsection}{0.8em}{}
+
+% ---------- Badges de conceptos de RL ----------
+\newcommand{\state}[1]{\tikz[baseline=(x.base)]\node[rounded corners=2pt,fill=Teal!13,text=TealDark,inner xsep=5pt,inner ysep=2pt] (x) {\scriptsize\bfseries ESTADO\enspace #1};}
+\newcommand{\rlaction}[1]{\tikz[baseline=(x.base)]\node[rounded corners=2pt,fill=Coral!13,text=Coral,inner xsep=5pt,inner ysep=2pt] (x) {\scriptsize\bfseries ACCIÓN\enspace #1};}
+\newcommand{\reward}[1]{\tikz[baseline=(x.base)]\node[rounded corners=2pt,fill=Gold!22,text=Ink,inner xsep=5pt,inner ysep=2pt] (x) {\scriptsize\bfseries RECOMPENSA\enspace #1};}
+
+% ---------- Entornos de Cajas de Énfasis (tcolorbox) ----------
+\newtcolorbox{ideaclave}[1][]{
+  colback=Coral!7,
+  colframe=Coral,
+  arc=3pt,
+  boxrule=1.2pt,
+  left=12pt,
+  right=12pt,
+  top=8pt,
+  bottom=8pt,
+  title={\textbf{\textcolor{Coral}{Idea Clave}}},
+  fonttitle=\sffamily\bfseries,
+  coltitle=Coral,
+  #1
+}
+
+\newtcolorbox{optibot}[1][]{
+  colback=Teal!6,
+  colframe=Teal,
+  arc=3pt,
+  boxrule=1.2pt,
+  left=12pt,
+  right=12pt,
+  top=8pt,
+  bottom=8pt,
+  title={\textbf{\textcolor{Teal}{OptiBot en Acción: Caso Conductor}}},
+  fonttitle=\sffamily\bfseries,
+  coltitle=Teal,
+  #1
+}
+
+\newtcolorbox{calculomanual}[1][]{
+  colback=Leaf!6,
+  colframe=Leaf,
+  arc=3pt,
+  boxrule=1.2pt,
+  left=12pt,
+  right=12pt,
+  top=8pt,
+  bottom=8pt,
+  title={\textbf{\textcolor{Leaf}{Cálculo Manual Paso a Paso}}},
+  fonttitle=\sffamily\bfseries,
+  coltitle=Leaf,
+  #1
+}
+
+\newtcolorbox{notabox}[1][]{
+  colback=Mist!25,
+  colframe=SoftText,
+  arc=3pt,
+  boxrule=0.8pt,
+  left=10pt,
+  right=10pt,
+  top=6pt,
+  bottom=6pt,
+  title={\textbf{\textcolor{SoftText}{Nota de Diseño}}},
+  fonttitle=\sffamily\small\bfseries,
+  coltitle=SoftText,
+  #1
+}
+
+% ---------- Estilo de Código Python ----------
+\lstdefinestyle{rlcode}{
+  language=Python,
+  backgroundcolor=\color{CodeBg},
+  basicstyle=\ttfamily\footnotesize\color{white!92},
+  keywordstyle=\bfseries\color{Gold},
+  commentstyle=\itshape\color{Leaf!85},
+  stringstyle=\color{Coral!85},
+  numbers=left,
+  numberstyle=\tiny\color{white!40},
+  numbersep=8pt,
+  frame=none,
+  showstringspaces=false,
+  breaklines=true,
+  tabsize=2,
+  xleftmargin=1.8em,
+  aboveskip=10pt,
+  belowskip=10pt
+}
+
+% ---------- Metadatos del documento ----------
+\title{
+  \vspace{-2cm}
+  {\fontsize{14}{16}\selectfont\bfseries\color{Teal}CURSO COMPLETO TEORÍA + PRÁCTICA (36 HORAS)}\\[1.5cm]
+  {\fontsize{28}{34}\selectfont\bfseries\color{Ink}Aprendizaje por Refuerzo}\\[0.4cm]
+  {\fontsize{16}{20}\selectfont\color{SoftText}De la Probabilidad a las Redes Neuronales Profundas}\\[1cm]
+  \tikz{\fill[Teal](0,0) circle (3pt);\fill[Coral](8pt,0) circle (3pt);\fill[Gold](16pt,0) circle (3pt);}
+}
+\author{\textbf{Profesor Especialista en Aprendizaje por Refuerzo}\\[0.2cm]\small Metodología: Lápiz, Papel y Código}
+\date{Edición 2026}
+
+\begin{document}
+
+\maketitle
+
+\tableofcontents
+\newpage
+
+% Aquí se incluyen los capítulos auxiliares:
+% \input{cap00_probabilidad.tex}
+% \input{cap01_bandidos.tex}
+% ...
+
+\end{document}

@@ -1,0 +1,151 @@
+% ============================================================
+% MÓDULO 3: PROCESOS DE DECISIÓN DE MARKOV Y BELLMAN
+% ============================================================
+\section{M3 · MDP + Bellman}
+\module{Módulo 3: MDPs y Bellman}{La convergencia de estados, acciones y recompensas: el núcleo formal del RL}
+
+\begin{frame}{El Gran Salto Conceptual: Uniendo M1 y M2}
+  \centering
+  \begin{tikzpicture}[node distance=1.2cm,
+    card/.style={rounded corners=5pt,minimum width=3.8cm,minimum height=1.8cm,align=center,inner sep=8pt},
+    arr/.style={-{Latex[length=3mm]},line width=1.4pt}]
+    \node[card,draw=Coral,fill=Coral!10] (m1) {\textcolor{Coral}{\bfseries Módulo 1: Bandidos}\\[0.2em]Hay \textbf{acciones} y recompensas,\\pero \textbf{no hay estados}.};
+    \node[card,draw=Gold!80!Ink,fill=Gold!12,right=1.5cm of m1] (m2) {\textcolor{Gold!70!Ink}{\bfseries Módulo 2: C. Markov}\\[0.2em]Hay \textbf{estados} y dinámica,\\pero \textbf{no hay acciones}.};
+    \node[card,draw=Teal,fill=Teal!12,below=1.2cm of $(m1)!0.5!(m2)$,minimum width=7cm] (mdp)
+      {\textcolor{TealDark}{\bfseries Módulo 3: Proceso de Decisión de Markov (MDP)}\\[0.2em]
+       \textbf{Estados + Acciones + Recompensas + Horizonte temporal $\gamma$}};
+    \draw[arr,Coral] (m1.south) -- (mdp.north west);
+    \draw[arr,Gold!80!Ink] (m2.south) -- (mdp.north east);
+  \end{tikzpicture}
+  \vspace{0.35cm}
+  \keyidea{En un MDP, las acciones del agente no sólo obtienen recompensas inmediatas, sino que \textbf{determinan el siguiente estado del mundo}.}
+\end{frame}
+
+\begin{frame}{La Tupla del MDP y el Retorno Descontado}
+  \begin{columns}[T,onlytextwidth]
+    \column{0.48\textwidth}
+      \begin{block}{Definición Formal: $\langle \mathcal{S}, \mathcal{A}, \mathcal{P}, \mathcal{R}, \gamma \rangle$}
+        \begin{itemize}
+          \item $\mathcal{S}$: Conjunto de estados posibles.
+          \item $\mathcal{A}$: Conjunto de acciones disponibles.
+          \item $\mathcal{P}_{ss'}^a = P(S_{t+1}=s' \mid S_t=s, A_t=a)$.
+          \item $\mathcal{R}(s,a) = \mathbb{E}[R_{t+1} \mid S_t=s, A_t=a]$.
+          \item $\gamma \in [0, 1)$: Factor de descuento.
+        \end{itemize}
+      \end{block}
+    \column{0.48\textwidth}
+      \begin{alertblock}{El Retorno Acumulado $G_t$}
+        \[
+          G_t = R_{t+1} + \gamma R_{t+2} + \gamma^2 R_{t+3} + \cdots = \sum_{k=0}^{\infty} \gamma^k R_{t+k+1}
+        \]
+      \end{alertblock}
+      \textbf{¿Por qué descontar con $\gamma$?}
+      \begin{itemize}
+        \item Evita infinitos matemáticos en tareas continuas.
+        \item Modela la incertidumbre del futuro distante.
+        \item Si $\gamma \to 0$, agente miope; si $\gamma \to 1$, visionario.
+      \end{itemize}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{Funciones de Valor: $V^\pi(s)$ y $Q^\pi(s,a)$}
+  \begin{columns}[T,onlytextwidth]
+    \column{0.48\textwidth}
+      \begin{block}{Función Valor de Estado $V^\pi(s)$}
+        ¿Qué tan bueno es estar en el estado $s$ si sigo la política $\pi$?
+        \[
+          V^\pi(s) \doteq \mathbb{E}_\pi [G_t \mid S_t = s]
+        \]
+      \end{block}
+      \vspace{0.2cm}
+      \centering
+      \begin{tikzpicture}[scale=0.85]
+        \node[circle,draw=TealDark,fill=Teal!20,thick,minimum size=0.8cm] (s) at (0,1) {$s$};
+        \node[circle,draw=Coral,fill=Coral!20,thick,minimum size=0.4cm] (a1) at (-0.8,0) {};
+        \node[circle,draw=Coral,fill=Coral!20,thick,minimum size=0.4cm] (a2) at (0.8,0) {};
+        \draw[-{Latex},thick] (s) -- node[left,font=\tiny] {$\pi(a_1|s)$} (a1);
+        \draw[-{Latex},thick] (s) -- node[right,font=\tiny] {$\pi(a_2|s)$} (a2);
+      \end{tikzpicture}
+    \column{0.48\textwidth}
+      \begin{alertblock}{Función Valor de Acción $Q^\pi(s,a)$}
+        ¿Qué tan bueno es tomar $a$ en $s$, y a partir de ahí seguir $\pi$?
+        \[
+          Q^\pi(s,a) \doteq \mathbb{E}_\pi [G_t \mid S_t = s, A_t = a]
+        \]
+      \end{alertblock}
+      \vspace{0.2cm}
+      \centering
+      \begin{tikzpicture}[scale=0.85]
+        \node[circle,draw=Coral,fill=Coral!20,thick,minimum size=0.5cm] (sa) at (0,1) {$a$};
+        \node[circle,draw=TealDark,fill=Teal!20,thick,minimum size=0.7cm] (s1) at (-0.8,0) {$s'_1$};
+        \node[circle,draw=TealDark,fill=Teal!20,thick,minimum size=0.7cm] (s2) at (0.8,0) {$s'_2$};
+        \draw[-{Latex},thick] (sa) -- node[left,font=\tiny] {$p$} (s1);
+        \draw[-{Latex},thick] (sa) -- node[right,font=\tiny] {$p$} (s2);
+      \end{tikzpicture}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{La Ecuación de Expectativa de Bellman}
+  \begin{columns}[c,onlytextwidth]
+    \column{0.55\textwidth}
+      \begin{beamercolorbox}[rounded=true,sep=0.9em]{block body}
+        \[
+          V^\pi(s) = \sum_{a \in \mathcal{A}} \pi(a \mid s) \left[ \mathcal{R}(s,a) + \gamma \sum_{s' \in \mathcal{S}} \mathcal{P}_{ss'}^a V^\pi(s') \right]
+        \]
+      \end{beamercolorbox}
+      \vspace{0.3cm}
+      \textbf{La intuición fundamental de Richard Bellman:}
+      \[
+        \text{Valor de HOY} = \mathbb{E}[\text{Recompensa Inmediata}] + \gamma \times \mathbb{E}[\text{Valor de MAÑANA}]
+      \]
+    \column{0.42\textwidth}
+      \begin{block}{Propiedad crucial}
+        Bellman convierte un problema infinito y recurrente en un \textbf{sistema lineal de ecuaciones} con $|\mathcal{S}|$ incógnitas y $|\mathcal{S}|$ ecuaciones:
+        \[
+          \mathbf{V}^\pi = \mathbf{R}^\pi + \gamma \mathbf{P}^\pi \mathbf{V}^\pi
+        \]
+        cuya solución analítica es:
+        \[
+          \mathbf{V}^\pi = (\mathbf{I} - \gamma \mathbf{P}^\pi)^{-1} \mathbf{R}^\pi
+        \]
+      \end{block}
+  \end{columns}
+\end{frame}
+
+\begin{frame}[fragile]{Cálculo Numérico en Python: Almacén OptiBot}
+  \begin{columns}[T,onlytextwidth]
+    \column{0.62\textwidth}
+\begin{lstlisting}[style=rlcode]
+import numpy as np
+
+# Estados: 0: Muelle, 1: Pasillo, 2: Bateria
+gamma = 0.90
+
+# Dinamica bajo politica fija pi (ir a cargar)
+P_pi = np.array([
+    [0.1, 0.8, 0.1],  # Desde Muelle
+    [0.0, 0.2, 0.8],  # Desde Pasillo
+    [0.0, 0.0, 1.0]   # Bateria (estado terminal/carga)
+])
+
+# Recompensas esperadas inmediatas
+R_pi = np.array([+2.0, -1.0, +10.0])
+
+# Resolucion exacta de la Ecuacion de Bellman:
+# V = (I - gamma * P_pi)^(-1) * R_pi
+I = np.eye(3)
+V_pi = np.linalg.inv(I - gamma * P_pi) @ R_pi
+
+print("Valores V(s):", np.round(V_pi, 2))
+# Salida: [77.58, 86.82, 100.0]
+\end{lstlisting}
+    \column{0.35\textwidth}
+      \begin{alertblock}{La limitación de M3}
+        Bellman nos permite \textbf{evaluar} el valor de los estados dada una política $\pi$ fija.\\
+        \vspace{0.2cm}
+        Pero OptiBot no quiere evaluar una política cualquiera: quiere \textbf{encontrar la política óptima $\pi^*$}.\\
+        \vspace{0.2cm}
+        ¿Cómo buscamos el comportamiento perfecto? $\to$ \textbf{Programación Dinámica (M4)}.
+      \end{alertblock}
+  \end{columns}
+\end{frame}

@@ -1,0 +1,113 @@
+\chapter{Métodos Monte Carlo}
+\label{cap:monte_carlo}
+
+\section{El Aprendizaje Libre de Modelo (Model-Free RL)}
+Hasta el Capítulo~\ref{cap:dp}, asumimos una condición privilegiada: conocíamos con precisión absoluta las ecuaciones del entorno ($\mathcal{P}$ y $\mathcal{R}$). En casi todas las aplicaciones prácticas de la robótica, la logística o los videojuegos, esta suposición resulta inviable.
+
+Los \textbf{Métodos Monte Carlo} rompen de raíz esta dependencia: permiten al agente estimar las funciones de valor y optimizar políticas basándose \textbf{únicamente en la experiencia empírica} obtenida al interactuar con el entorno real o con un simulador.
+
+\begin{optibot}
+OptiBot es enviado a un nuevo centro de distribución cuyo plano y dinámicas de tráfico son completamente desconocidos. Ya no disponemos de matrices de transición precalculadas. En su lugar, dejamos que OptiBot ejecute turnos completos de trabajo (\textbf{episodios}). Durante el turno, el robot registra minuciosamente la secuencia de estados transitados, acciones tomadas y recompensas recibidas. Al final de la jornada laboral, analiza la experiencia acumulada para deducir qué caminos y decisiones resultaron más rentables.
+\end{optibot}
+
+\section{Estimación de Valores por Muestreo de Retornos}
+Un episodio completo genera una trayectoria finita de interacción:
+\begin{equation}
+  S_0, A_0, R_1, S_1, A_1, R_2, S_2, \dots, S_{T-1}, A_{T-1}, R_T, S_T
+\end{equation}
+donde $S_T$ representa el estado terminal (por ejemplo, el paquete ha sido entregado exitosamente o la batería se ha agotado por completo).
+
+A partir de cualquier instante $t$, el retorno descontado observado en esa trayectoria concreta se calcula de manera exacta:
+\begin{equation}
+  G_t = R_{t+1} + \gamma R_{t+2} + \dots + \gamma^{T-t-1} R_T
+\end{equation}
+
+Recordando el principio visto en el Capítulo~\ref{cap:probabilidad}, el valor de un estado $V^\pi(s)$ es la esperanza matemática $\mathbb{E}_\pi[G_t \mid S_t = s]$. Por la Ley de los Grandes Números, el promedio aritmético de los retornos empíricos observados tras visitar el estado $s$ converge a su valor verdadero a medida que el número de episodios tiende a infinito:
+\begin{equation}
+  V(s) \approx \frac{1}{N(s)} \sum_{i=1}^{N(s)} G_i(s)
+\end{equation}
+
+\subsection{First-Visit vs. Every-Visit Monte Carlo}
+\begin{itemize}
+  \item \textbf{First-Visit MC:} Para cada episodio, sólo se promedia el retorno $G_t$ correspondiente a la \textbf{primera vez} que el estado $s$ es visitado dentro de dicha trayectoria. Garantiza estimaciones insesgadas e independientes de $V^\pi(s)$.
+  \item \textbf{Every-Visit MC:} Se promedian todos los retornos observados en cada visita a $s$, incluso si el agente visita el mismo estado repetidamente en un bucle durante el mismo episodio.
+\end{itemize}
+
+\section{Control Monte Carlo sin Modelo: Estimar $Q(s,a)$}
+En Programación Dinámica podíamos limitarnos a calcular $V(s)$ porque, para elegir la mejor acción, disponíamos de la matriz $\mathcal{P}_{ss'}^a$ y podíamos calcular:
+\[
+  a^* = \arg\max_a \sum_{s'} \mathcal{P}_{ss'}^a V(s')
+\]
+\begin{ideaclave}
+En el aprendizaje libre de modelo, no conocemos $\mathcal{P}_{ss'}^a$. Conocer únicamente $V(s)$ es inútil para la toma de decisiones, porque no sabemos a qué estado sucesor nos conducirá cada acción. Por ello, los métodos libres de modelo deben estimar obligatoriamente la \textbf{función de valor de acción $Q(s,a)$}.
+\end{ideaclave}
+
+Teniendo $Q(s,a)$, el agente puede actuar de forma codiciosa directamente sin necesidad de consultar ningún modelo físico:
+\begin{equation}
+  \pi(s) = \arg\max_{a \in \mathcal{A}} Q(s,a)
+\end{equation}
+
+Para garantizar que todas las combinaciones de estado y acción sigan siendo visitadas y sus valores continúen refinándose, el agente emplea una política $\varepsilon$-greedy con respecto a la tabla $Q(s,a)$ actual.
+
+\begin{calculomanual}
+Supongamos que OptiBot parte del Muelle ($S_0$), toma la acción Avanzar ($A_0$) y genera el siguiente episodio con factor de descuento $\gamma = 0.9$:
+\[
+  S_0 \xrightarrow{R_1=-1} S_1 \xrightarrow{R_2=-1} S_2 \xrightarrow{R_3=+10} \text{Meta}
+\]
+Calculamos los retornos acumulados recorriendo la trayectoria \textbf{de atrás hacia adelante}:
+\begin{align*}
+  G_2 &= R_3 = \mathbf{+10.0} \\
+  G_1 &= R_2 + \gamma G_2 = -1.0 + (0.9)(10.0) = \mathbf{+8.0} \\
+  G_0 &= R_1 + \gamma G_1 = -1.0 + (0.9)(8.0) = \mathbf{+6.2}
+\end{align*}
+El par $(S_0, A_0)$ añade la muestra $G_0 = 6.2$ a su registro de retornos. Si antes tenía un promedio $Q(S_0, A_0) = 4.0$ con 2 visitas previas ($N=2$), su nuevo valor estimado aplicando la regla incremental es:
+\[
+  Q_{\text{nuevo}}(S_0, A_0) = 4.0 + \frac{1}{3}(6.2 - 4.0) = 4.0 + 0.733 = \mathbf{4.733}
+\]
+\end{calculomanual}
+
+\section{Implementación en Python: Control Monte Carlo First-Visit}
+\begin{lstlisting}[style=rlcode]
+import numpy as np
+from collections import defaultdict
+
+class MonteCarloControl:
+    def __init__(self, n_actions=4, gamma=0.9, epsilon=0.15):
+        self.n_actions = n_actions
+        self.gamma = gamma
+        self.epsilon = epsilon
+        self.Q = defaultdict(lambda: np.zeros(n_actions))
+        self.returns_sum = defaultdict(float)
+        self.returns_count = defaultdict(int)
+
+    def select_action(self, state):
+        if np.random.rand() < self.epsilon:
+            return np.random.randint(self.n_actions)
+        return np.argmax(self.Q[state])
+
+    def update_episode(self, episode):
+        # episode es una lista de tuplas (estado, accion, recompensa)
+        G = 0.0
+        visited_sa = set()
+        # Recorrido inverso para computar G_t en O(T)
+        for state, action, reward in reversed(episode):
+            G = self.gamma * G + reward
+            sa_pair = (state, action)
+            if sa_pair not in visited_sa:
+                visited_sa.add(sa_pair)
+                self.returns_sum[sa_pair] += G
+                self.returns_count[sa_pair] += 1
+                # Actualizacion del promedio
+                self.Q[state][action] = (
+                    self.returns_sum[sa_pair] / self.returns_count[sa_pair]
+                )
+\end{lstlisting}
+
+\begin{notabox}
+\textbf{La limitación que motiva el siguiente capítulo:} Los métodos Monte Carlo son insesgados y fáciles de entender, pero sufren dos debilidades severas:
+\begin{enumerate}
+  \item \textbf{Alta varianza:} Al sumar muchas recompensas estocásticas a lo largo de todo un episodio, el retorno $G_t$ presenta una varianza elevada, lo que ralentiza la convergencia.
+  \item \textbf{Exclusivamente episódicos:} El robot debe esperar obligatoriamente a que concluya el turno completo para actualizar el primer paso. Si un turno dura horas o la tarea es continua y nunca termina, Monte Carlo no puede aprender en tiempo real.
+\end{enumerate}
+¿Es posible aprender paso a paso, tras cada movimiento individual, sin esperar al final del episodio? La respuesta es el mayor hito conceptual del RL: el \textbf{Aprendizaje por Diferencia Temporal (TD)}.
+\end{notabox}

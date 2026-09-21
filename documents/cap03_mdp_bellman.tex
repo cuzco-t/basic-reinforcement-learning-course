@@ -1,0 +1,134 @@
+\chapter{Procesos de Decisión de Markov y Ecuaciones de Bellman}
+\label{cap:mdp}
+
+\section{La Gran Síntesis: De Bandidos y Cadenas al MDP}
+Hemos llegado a la encrucijada conceptual que funda el Aprendizaje por Refuerzo. Recapitulemos lo aprendido hasta aquí:
+\begin{itemize}
+  \item En el \textbf{Capítulo~\ref{cap:bandidos} (Bandidos)}, el agente realizaba \textbf{acciones} y recibía \textbf{recompensas}, pero no existían \textbf{estados}: el mundo no cambiaba tras cada elección.
+  \item En el \textbf{Capítulo~\ref{cap:markov} (Cadenas de Markov)}, existían \textbf{estados} que cambiaban con el tiempo, pero no existían \textbf{acciones}: éramos espectadores pasivos de una película estocástica.
+\end{itemize}
+
+El \textbf{Proceso de Decisión de Markov (MDP)} es la fusión perfecta de ambos mundos: el agente se encuentra en un estado, elige una acción deliberada, recibe una recompensa numérica y el mundo transita a un nuevo estado estocástico en función de dicha acción.
+
+\begin{optibot}
+OptiBot ahora es un robot móvil que se desplaza activamente por el almacén para entregar paquetes y gestionar su energía. Su universo operacional se divide en tres zonas discretas $\mathcal{S} = \{ \text{Muelle } (M), \text{Pasillo } (P), \text{Estación de Carga } (C) \}$.
+\begin{itemize}
+  \item En el Muelle recibe paquetes y gana recompensas positivas ($+\$2$).
+  \item En el Pasillo consume batería al desplazarse (costo de $-\$1$).
+  \item En la Estación de Carga recarga sus baterías y asegura la continuidad operativa (bonificación de $+\$10$).
+\end{itemize}
+Las decisiones de OptiBot determinan no sólo cuánto gana hoy, sino en qué zona del almacén se encontrará mañana.
+\end{optibot}
+
+\section{Definición Formal de un MDP}
+Un MDP finito se define rigurosamente mediante la tupla de 5 elementos:
+\begin{equation}
+  \mathcal{M} = \langle \mathcal{S}, \, \mathcal{A}, \, \mathcal{P}, \, \mathcal{R}, \, \gamma \rangle
+\end{equation}
+donde:
+\begin{itemize}
+  \item $\mathcal{S}$ es el espacio finito de estados observables.
+  \item $\mathcal{A}$ es el espacio finito de acciones disponibles.
+  \item $\mathcal{P}_{ss'}^a = P(S_{t+1} = s' \mid S_t = s, A_t = a)$ es la función de dinámica de transición.
+  \item $\mathcal{R}(s, a) = \mathbb{E}[R_{t+1} \mid S_t = s, A_t = a]$ es la recompensa inmediata esperada.
+  \item $\gamma \in [0, 1)$ es el factor de descuento temporal.
+\end{itemize}
+
+\section{Retorno Descontado y Políticas}
+Una \textbf{política} $\pi$ especifica el comportamiento del agente. En su forma más general, es una distribución de probabilidad condicional sobre las acciones dado el estado actual:
+\begin{equation}
+  \pi(a \mid s) \doteq P(A_t = a \mid S_t = s)
+\end{equation}
+
+El objetivo del agente no es maximizar la recompensa inmediata de un solo paso, sino el \textbf{retorno descontado acumulado} $G_t$:
+\begin{equation}
+  G_t \doteq R_{t+1} + \gamma R_{t+2} + \gamma^2 R_{t+3} + \dots = \sum_{k=0}^{\infty} \gamma^k R_{t+k+1}
+\end{equation}
+El parámetro $\gamma$ regula el horizonte de planificación del agente: valores cercanos a $0$ generan agentes miopes centrados en la gratificación inmediata, mientras que valores próximos a $1$ promueven agentes estratégicos y pacientes.
+
+\section{Funciones de Valor y Deducción de las Ecuaciones de Bellman}
+Definimos dos funciones de valor fundamentales bajo una política $\pi$:
+\begin{enumerate}
+  \item \textbf{Función de Valor de Estado:} $V^\pi(s) \doteq \mathbb{E}_\pi [G_t \mid S_t = s]$
+  \item \textbf{Función de Valor de Acción:} $Q^\pi(s, a) \doteq \mathbb{E}_\pi [G_t \mid S_t = s, A_t = a]$
+\end{enumerate}
+
+Aplicando la definición recursiva del retorno $G_t = R_{t+1} + \gamma G_{t+1}$ y la Ley de Probabilidad Total, deducimos la \textbf{Ecuación de Expectativa de Bellman}:
+\begin{align}
+  V^\pi(s) &= \mathbb{E}_\pi \left[ R_{t+1} + \gamma G_{t+1} \;\middle|\; S_t = s \right] \notag \\
+  &= \sum_{a \in \mathcal{A}} \pi(a \mid s) \left[ \mathcal{R}(s, a) + \gamma \sum_{s' \in \mathcal{S}} \mathcal{P}_{ss'}^a V^\pi(s') \right]
+\end{align}
+
+\begin{ideaclave}
+La genialidad de Richard Bellman radica en transformar una suma infinita sobre el futuro en una relación recursiva de dos términos:
+\begin{equation}
+  \text{Valor de HOY} = \mathbb{E}[\text{Recompensa Inmediata}] + \gamma \cdot \mathbb{E}[\text{Valor de MAÑANA}]
+\end{equation}
+\end{ideaclave}
+
+\section{Solución Matricial Exacta de Bellman}
+Para una política dada $\pi$, definimos el vector de recompensas medias inducidas $\mathbf{R}^\pi \in \mathbb{R}^{|\mathcal{S}|}$ y la matriz de transición inducida $\mathbf{P}^\pi \in \mathbb{R}^{|\mathcal{S}| \times |\mathcal{S}|}$. La ecuación de Bellman se compacta en forma vectorial:
+\begin{equation}
+  \mathbf{V}^\pi = \mathbf{R}^\pi + \gamma \mathbf{P}^\pi \mathbf{V}^\pi
+\end{equation}
+Reorganizando algebraicamente:
+\begin{equation}
+  (\mathbf{I} - \gamma \mathbf{P}^\pi) \mathbf{V}^\pi = \mathbf{R}^\pi \implies \mathbf{V}^\pi = (\mathbf{I} - \gamma \mathbf{P}^\pi)^{-1} \mathbf{R}^\pi
+\end{equation}
+
+\begin{calculomanual}
+Consideremos a OptiBot con $\gamma = 0.90$. Evaluamos la política fija de desplazarse a recargar:
+\[
+  \mathbf{P}^\pi = \begin{pmatrix}
+    0.10 & 0.80 & 0.10 \\
+    0.00 & 0.20 & 0.80 \\
+    0.00 & 0.00 & 1.00
+  \end{pmatrix}, \qquad \mathbf{R}^\pi = \begin{pmatrix} +2.0 \\ -1.0 \\ +10.0 \end{pmatrix}
+\]
+Calculamos primero la última componente $V(C)$ (la estación de carga es un estado absorbente de recarga):
+\[
+  V(C) = 10.0 + 0.90(1.00 \cdot V(C)) \implies V(C)(1 - 0.90) = 10.0 \implies V(C) = \mathbf{100.0}
+\]
+Sustituimos $V(C)$ en la segunda ecuación para el Pasillo:
+\[
+  V(P) = -1.0 + 0.90 \big( 0.20 V(P) + 0.80(100.0) \big) = -1.0 + 0.18 V(P) + 72.0 = 71.0 + 0.18 V(P)
+\]
+\[
+  V(P)(1 - 0.18) = 71.0 \implies 0.82 V(P) = 71.0 \implies V(P) \approx \mathbf{86.59}
+\]
+Finalmente, sustituimos en el Muelle:
+\[
+  V(M) = 2.0 + 0.90 \big( 0.10 V(M) + 0.80(86.59) + 0.10(100.0) \big) = 2.0 + 0.09 V(M) + 62.34 + 9.0
+\]
+\[
+  0.91 V(M) = 73.34 \implies V(M) \approx \mathbf{80.59}
+\]
+El vector exacto de valores es $\mathbf{V}^\pi \approx [80.59, \, 86.59, \, 100.00]^T$.
+\end{calculomanual}
+
+\section{Implementación en Python}
+\begin{lstlisting}[style=rlcode]
+import numpy as np
+
+# Definicion del MDP de OptiBot
+gamma = 0.90
+P_pi = np.array([
+    [0.10, 0.80, 0.10],
+    [0.00, 0.20, 0.80],
+    [0.00, 0.00, 1.00]
+])
+R_pi = np.array([2.0, -1.0, 10.0])
+
+# Resolucion analitica del sistema lineal de Bellman
+I = np.eye(3)
+A = I - gamma * P_pi
+V_pi = np.linalg.solve(A, R_pi)
+
+estados = ["Muelle", "Pasillo", "Carga"]
+for s, v in zip(estados, V_pi):
+    print(f"V({s}) = {v:.2f}")
+\end{lstlisting}
+
+\begin{notabox}
+\textbf{La limitación que motiva el siguiente paso:} La ecuación de expectativa de Bellman nos permite \textbf{evaluar} una política $\pi$ dada. Sin embargo, el objetivo central de la inteligencia artificial es el \textbf{control}: encontrar la política óptima $\pi^*$ que maximice las ganancias del robot. Ese es el propósito de la \textbf{Programación Dinámica}.
+\end{notabox}

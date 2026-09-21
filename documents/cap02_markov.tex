@@ -1,0 +1,112 @@
+\chapter{Cadenas de Markov y Procesos Estocásticos}
+\label{cap:markov}
+
+\section{Introducción a la Dinámica Temporal}
+En el capítulo anterior comprobamos que OptiBot podía aprender a seleccionar el mejor proveedor de mensajería mediante la regla de actualización incremental. No obstante, el entorno era completamente estático: cada decisión se tomaba en el mismo instante abstracto y no afectaba a los intentos venideros.
+
+En el mundo físico, los entornos poseen memoria física y estados cambiantes: la batería se descarga, las ruedas pierden adherencia y las cintas transportadoras sufren desgaste mecánico. Para modelar matemáticamente cómo un sistema físico evoluciona en el tiempo bajo la influencia del azar, recurrimos a las \textbf{Cadenas de Markov}.
+
+\section{La Propiedad de Markov}
+Consideremos una secuencia temporal de estados discretos $S_0, S_1, S_2, \dots, S_t, S_{t+1}$. Decimos que un proceso estocástico satisface la \textbf{Propiedad de Markov} si la distribución de probabilidad del estado futuro depende exclusivamente del estado presente, siendo condicionalmente independiente de toda la historia pasada:
+\begin{equation}
+  P\left( S_{t+1} = s_{t+1} \;\middle|\; S_t = s_t, \, S_{t-1} = s_{t-1}, \, \dots, \, S_0 = s_0 \right) = P\left( S_{t+1} = s_{t+1} \;\middle|\; S_t = s_t \right)
+\end{equation}
+
+\begin{ideaclave}
+La propiedad de Markov no afirma que el pasado carezca de importancia. Lo que establece es que \textbf{toda la información relevante del pasado ya se encuentra encapsulada en el estado presente}. Si conoces con exactitud dónde estás hoy, saber cómo llegaste allí no añade ningún poder predictivo sobre a dónde irás mañana.
+\end{ideaclave}
+
+\begin{optibot}
+OptiBot supervisa los rodamientos de la cinta transportadora central. En cada turno de trabajo, el estado del rodamiento se clasifica en una de tres categorías discretas $\mathcal{S} = \{ \text{Nuevo } (N), \text{Desgastado } (D), \text{Averiado } (A) \}$.
+\begin{itemize}
+  \item Si un rodamiento está Nuevo, tiene una probabilidad de $0.70$ de seguir Nuevo en el próximo turno, $0.20$ de pasar a Desgastado y $0.10$ de sufrir una rotura imprevista (Averiado).
+  \item Si está Desgastado, tiene probabilidad $0.60$ de seguir Desgastado, $0.30$ de romperse (Averiado) y $0.10$ de que un operario le aplique lubricante y vuelva a considerarse Nuevo.
+  \item Si está Averiado, la cinta se detiene hasta que el equipo de mantenimiento lo repara; permanece averiado con probabilidad $0.90$ y es sustituido por uno Nuevo con probabilidad $0.10$.
+\end{itemize}
+\end{optibot}
+
+\section{La Matriz de Transición de Estados}
+Para un conjunto finito de estados $\mathcal{S} = \{s_1, s_2, \dots, s_n\}$, organizamos todas las probabilidades de transición condicionales en una matriz cuadrada $P \in \mathbb{R}^{n \times n}$, donde cada elemento representa:
+\begin{equation}
+  P_{ij} \doteq P(S_{t+1} = s_j \mid S_t = s_i)
+\end{equation}
+Dado que partiendo de cualquier estado $s_i$ el sistema debe transitar obligatoriamente a algún estado del espacio muestral, cada fila de $P$ satisface la condición estocástica:
+\begin{equation}
+  \sum_{j=1}^n P_{ij} = 1 \quad \forall i \in \{1, \dots, n\}
+\end{equation}
+
+Para el caso de la cinta transportadora de OptiBot, la matriz de transición es:
+\begin{equation}
+  P = \begin{pmatrix}
+    0.70 & 0.20 & 0.10 \\
+    0.10 & 0.60 & 0.30 \\
+    0.10 & 0.00 & 0.90
+  \end{pmatrix}
+\end{equation}
+
+\section{Transiciones a Múltiples Pasos y Distribución Estacionaria}
+Si denotamos la distribución de probabilidad inicial del sistema como un vector fila $\mu_0 = [P(S_0=s_1), \dots, P(S_0=s_n)]$, la distribución en el paso 1 viene dada por el producto vectorial-matricial:
+\begin{equation}
+  \mu_1 = \mu_0 P
+\end{equation}
+Por inducción y por las ecuaciones de Chapman-Kolmogorov, la distribución en el paso $k$ es:
+\begin{equation}
+  \mu_k = \mu_0 P^k
+\end{equation}
+
+Cuando la cadena de Markov es irreducible y aperiódica, existe una única \textbf{distribución estacionaria} $\pi^* = [\pi_1^*, \dots, \pi_n^*]$ que es invariante bajo la aplicación de la matriz de transición:
+\begin{equation}
+  \pi^* P = \pi^* \quad \text{sujeto a} \quad \sum_{i=1}^n \pi_i^* = 1
+\end{equation}
+
+\begin{calculomanual}
+Supongamos que hoy instalamos un rodamiento totalmente nuevo, por lo que el vector de estado inicial es $\mu_0 = [1.0, 0.0, 0.0]$. ¿Cuál es la probabilidad exacta de que el rodamiento esté averiado dentro de 2 turnos?
+\begin{align*}
+  \mu_1 &= \mu_0 P = [0.70, 0.20, 0.10] \\
+  \mu_2 &= \mu_1 P = [0.70, 0.20, 0.10] \begin{pmatrix}
+    0.70 & 0.20 & 0.10 \\
+    0.10 & 0.60 & 0.30 \\
+    0.10 & 0.00 & 0.90
+  \end{pmatrix}
+\end{align*}
+Calculamos la tercera componente de $\mu_2$, correspondiente al estado Averiado ($A$):
+\begin{align*}
+  P(S_2 = A) &= (0.70)(0.10) + (0.20)(0.30) + (0.10)(0.90) \\
+  &= 0.07 + 0.06 + 0.09 = \mathbf{0.22}
+\end{align*}
+Existe un $22\%$ de probabilidad de que la cinta esté averiada en el segundo turno.
+\end{calculomanual}
+
+\section{Implementación en Python}
+A continuación calculamos la evolución a largo plazo y la distribución estacionaria mediante autovalores y autovectores en NumPy:
+
+\begin{lstlisting}[style=rlcode]
+import numpy as np
+
+P = np.array([
+    [0.70, 0.20, 0.10],
+    [0.10, 0.60, 0.30],
+    [0.10, 0.00, 0.90]
+])
+
+# 1. Proyeccion a 2 pasos
+mu_0 = np.array([1.0, 0.0, 0.0])
+P_2 = np.linalg.matrix_power(P, 2)
+mu_2 = mu_0 @ P_2
+print("Distribucion en t=2:", np.round(mu_2, 3))
+
+# 2. Calculo de la distribucion estacionaria (pi * P = pi)
+# Equivale a (P.T - I) * pi.T = 0
+evals, evecs = np.linalg.eig(P.T)
+# Buscamos el autovector correspondiente al autovalor 1
+idx = np.argmin(np.abs(evals - 1.0))
+pi_star = np.real(evecs[:, idx])
+pi_star = pi_star / np.sum(pi_star) # Normalizar para que sume 1
+
+print("Distribucion Estacionaria pi*:", np.round(pi_star, 4))
+print(f"Porcentaje de tiempo averiada a largo plazo: {pi_star[2]*100:.1f}%")
+\end{lstlisting}
+
+\begin{notabox}
+\textbf{La limitación que motiva el siguiente paso:} En este capítulo hemos dotado al mundo de dinamismo temporal. Sabemos cómo evoluciona el estado del entorno probabilísticamente. Sin embargo, \textbf{somos meros espectadores pasivos}: OptiBot no puede intervenir para reparar la cinta ni para cambiar su trayectoria. ¿Qué ocurre si unimos las \textbf{acciones con recompensas} del Capítulo~\ref{cap:bandidos} con los \textbf{estados dinámicos} del Capítulo~\ref{cap:markov}? La respuesta es la estructura nuclear del aprendizaje por refuerzo: el \textbf{Proceso de Decisión de Markov}.
+\end{notabox}

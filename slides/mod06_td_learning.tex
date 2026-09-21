@@ -1,0 +1,127 @@
+% ============================================================
+% MÓDULO 6: TEMPORAL-DIFFERENCE LEARNING (SARSA Y Q-LEARNING)
+% ============================================================
+\section{M6 · TD Learning}
+\module{Módulo 6: TD Learning}{La combinación definitiva: muestreo sin modelo + estimación por bootstrapping}
+
+\begin{frame}{La Idea Central de la Diferencia Temporal: Bootstrapping}
+  \begin{columns}[c,onlytextwidth]
+    \column{0.50\textwidth}
+      \textbf{¿Qué es Bootstrapping?}
+      Actualizar una predicción a partir de \textbf{otra predicción futura}, sin esperar al desenlace final del episodio.
+      \vspace{0.25cm}
+      \begin{itemize}
+        \item \textbf{DP:} Hace bootstrapping, pero necesita el modelo $\mathcal{P}$ y $\mathcal{R}$.
+        \item \textbf{MC:} No hace bootstrapping (espera al final), pero no necesita modelo.
+        \item \textbf{TD:} \textbf{¡Lo mejor de ambos mundos!} Aprende de la experiencia pura y actualiza paso a paso.
+      \end{itemize}
+    \column{0.48\textwidth}
+      \begin{beamercolorbox}[rounded=true,sep=0.8em]{block body}
+        \centering
+        {\large $V(S_t) \leftarrow V(S_t) + \alpha \big[ \underbrace{R_{t+1} + \gamma V(S_{t+1})}_{\text{Objetivo TD}} - V(S_t) \big]$}
+      \end{beamercolorbox}
+      \vspace{0.25cm}
+      \small El \textbf{Error TD} $\delta_t = R_{t+1} + \gamma V(S_{t+1}) - V(S_t)$ mide la sorpresa entre lo que predije ayer y la nueva evidencia de hoy.
+  \end{columns}
+  \vspace{0.35cm}
+  \keyidea{TD actualiza en cada paso individual ($t \to t+1$): puede aprender en tareas continuas sin fin de turno.}
+\end{frame}
+
+\begin{frame}{Control: SARSA vs. Q-Learning}
+  \begin{columns}[T,onlytextwidth]
+    \column{0.48\textwidth}
+      \begin{block}{SARSA (On-Policy)}
+        Aprende el valor de la política que realmente ejecuta (incluyendo los errores de exploración):
+        \[
+          Q(S,A) \leftarrow Q(S,A) + \alpha [ R + \gamma Q(S', A') - Q(S,A) ]
+        \]
+        \begin{itemize}
+          \item La tupla: $(S_t, A_t, R_{t+1}, S_{t+1}, A_{t+1})$.
+          \item $A'$ se elige con la misma política $\varepsilon$-greedy.
+          \item Tiende a ser más \textbf{prudente y conservador}.
+        \end{itemize}
+      \end{block}
+    \column{0.48\textwidth}
+      \begin{alertblock}{Q-Learning (Off-Policy, Watkins 1989)}
+        Aprende la política óptima $Q^*$ sin importar qué política de exploración use el robot:
+        \[
+          Q(S,A) \leftarrow Q(S,A) + \alpha [ R + \gamma \max_{a'} Q(S', a') - Q(S,A) ]
+        \]
+        \begin{itemize}
+          \item El objetivo usa $\max_{a'}$, no la acción ejecutada.
+          \item Aprende la ruta \textbf{óptima más corta}.
+        \end{itemize}
+      \end{alertblock}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{Cálculo Manual Paso a Paso: Actualización de Q-Learning}
+  \begin{columns}[c,onlytextwidth]
+    \column{0.50\textwidth}
+      \textbf{Transición observada de OptiBot:}
+      \begin{itemize}
+        \item Estado actual: $S = \text{Pasillo A}$
+        \item Acción: $A = \text{Avanzar}$
+        \item Recompensa recibida: $R = -1.0$
+        \item Siguiente estado: $S' = \text{Pasillo B}$
+      \end{itemize}
+      \textbf{Valores previos en la tabla Q:}
+      \begin{itemize}
+        \item $Q(S, A) = 4.0$
+        \item En $S'$: $Q(S', \text{Izq}) = 6.0$, $Q(S', \text{Der}) = 8.0$
+        \item Por tanto: $\max_{a'} Q(S', a') = 8.0$
+        \item Parámetros: $\alpha = 0.20$, $\gamma = 0.90$
+      \end{itemize}
+    \column{0.48\textwidth}
+      \begin{exampleblock}{Cálculo en la pizarra}
+        \begin{align*}
+          \text{Objetivo TD} &= R + \gamma \max_{a'} Q(S', a') \\
+          &= -1.0 + 0.90(8.0) = \mathbf{6.20} \\
+          \delta_t &= \text{Objetivo} - Q(S, A) \\
+          &= 6.20 - 4.00 = \mathbf{+2.20} \\
+          Q_{\text{nuevo}}(S, A) &= 4.00 + 0.20(+2.20) \\
+          &= 4.00 + 0.44 = \mathbf{4.44}
+        \end{align*}
+      \end{exampleblock}
+      \small ¡La estimación subió de 4.00 a 4.44 al descubrir que el Pasillo B tiene un camino muy prometedor!
+  \end{columns}
+\end{frame}
+
+\begin{frame}[fragile]{Implementación de Q-Learning para el Almacén}
+  \begin{columns}[T,onlytextwidth]
+    \column{0.62\textwidth}
+\begin{lstlisting}[style=rlcode]
+for ep in range(num_episodes):
+    s, _ = env.reset()
+    done = False
+    
+    while not done:
+        # Seleccion de accion epsilon-greedy
+        if np.random.rand() < epsilon:
+            a = env.action_space.sample()
+        else:
+            a = np.argmax(Q[s])
+            
+        s_next, r, terminated, truncated, _ = env.step(a)
+        done = terminated or truncated
+        
+        # Actualizacion de Q-Learning
+        target = r
+        if not done:
+            target += gamma * np.max(Q[s_next])
+            
+        td_error = target - Q[s, a]
+        Q[s, a] += alpha * td_error
+        s = s_next
+\end{lstlisting}
+    \column{0.35\textwidth}
+      \begin{alertblock}{La limitación de M6}
+        Q-Learning tabular es el estándar de oro para problemas pequeños.\\
+        \vspace{0.2cm}
+        \textbf{El abismo de la dimensionalidad:}
+        Si el almacén tiene $1,000,000$ posiciones o sensores continuos (LiDAR, batería en \%, velocidades), la tabla requeriría gigabytes y nunca visitaría cada casilla.\\
+        \vspace{0.2cm}
+        ¿Cómo generalizar a estados nunca vistos? $\to$ \textbf{Deep Q-Networks (M7)}.
+      \end{alertblock}
+  \end{columns}
+\end{frame}

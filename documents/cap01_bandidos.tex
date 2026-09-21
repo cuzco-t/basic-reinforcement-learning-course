@@ -1,0 +1,129 @@
+\chapter{El Problema de los Bandidos Multi-Brazo}
+\label{cap:bandidos}
+
+\section{La Esencia del Aprendizaje por Refuerzo}
+A diferencia del aprendizaje supervisado, donde un maestro externo proporciona la etiqueta correcta para cada entrada, en el Aprendizaje por Refuerzo el agente recibe una señal \textbf{evaluativa} (una recompensa numérica), pero nunca \textbf{instructiva} (nadie le dice cuál habría sido la mejor acción posible).
+
+Para aislar esta dinámica de aprendizaje sin la complicación añadida del movimiento espacial, Sutton y Barto introducen el problema del \textbf{Bandido de $k$-brazos} (\textit{$k$-armed bandit}). En este escenario existe un único estado estático: el agente debe elegir repetidamente una acción entre $k$ opciones disponibles, recibiendo una recompensa numérica extraída de una distribución de probabilidad fija pero desconocida.
+
+\begin{optibot}
+OptiBot se encuentra instalado en la estación central de despacho. Por cada paquete que sale de la cinta, debe seleccionar una de \textbf{4 empresas de mensajería}:
+\begin{itemize}
+  \item \textbf{Proveedor A:} Tiempo rápido, pero cobra recargos ocasionales ($q_*(A) = 3.2$).
+  \item \textbf{Proveedor B:} El más eficiente y rentable en promedio ($q_*(B) = 4.8$).
+  \item \textbf{Proveedor C:} Económico pero con frecuentes averías y retrasos ($q_*(C) = 2.1$).
+  \item \textbf{Proveedor D:} Servicio premium constante ($q_*(D) = 4.1$).
+\end{itemize}
+OptiBot \textbf{no conoce} estos valores teóricos $q_*$. Cada vez que selecciona un proveedor, observa la ganancia neta obtenida $R_t$. Su meta es maximizar la ganancia total acumulada a lo largo de 1,000 despachos.
+\end{optibot}
+
+\section{Valor de Acción y Estimación de Recompensas}
+Denotamos la acción elegida en el instante de tiempo $t$ como $A_t$ y la recompensa resultante como $R_t$. El \textbf{valor verdadero} de una acción arbitraria $a$, denotado $q_*(a)$, se define formalmente como la esperanza condicionada:
+\begin{equation}
+  q_*(a) \doteq \mathbb{E}\left[ R_t \mid A_t = a \right]
+\end{equation}
+Dado que el agente desconoce $q_*(a)$, mantiene una estimación en el paso $t$, denotada como $Q_t(a)$. Si el agente selecciona una acción $a$ un total de $N_t(a)$ veces hasta el tiempo $t$, la estimación más natural es el promedio de las recompensas recibidas:
+\begin{equation}
+  Q_t(a) \doteq \frac{\sum_{i=1}^{t-1} R_i \cdot \mathbb{I}(A_i = a)}{N_t(a)}
+\end{equation}
+
+\section{La Regla de Actualización Incremental}
+Almacenar todas las recompensas históricas en un vector requeriría una memoria que crece indefinidamente con el tiempo. Afortunadamente, podemos actualizar el promedio de forma recursiva:
+\begin{align}
+  Q_{n+1} &= \frac{1}{n} \sum_{i=1}^n R_i \notag \\
+  &= \frac{1}{n} \left( R_n + \sum_{i=1}^{n-1} R_i \right) \notag \\
+  &= \frac{1}{n} \left( R_n + (n-1) Q_n \right) \notag \\
+  &= Q_n + \frac{1}{n} \left( R_n - Q_n \right)
+\end{align}
+
+\begin{ideaclave}
+La ecuación anterior representa el patrón estructural más importante de todo el Aprendizaje por Refuerzo:
+\begin{equation}
+  \text{NuevaEstimación} \leftarrow \text{EstimaciónPrevia} + \text{TamañoDePaso} \times \left[ \text{Objetivo} - \text{EstimaciónPrevia} \right]
+\end{equation}
+El término entre corchetes, $[\text{Objetivo} - \text{EstimaciónPrevia}]$, se denomina el \textbf{error de estimación}. Este mismo esquema gobierna la Diferencia Temporal, SARSA, Q-Learning y el entrenamiento de redes neuronales profundas.
+\end{ideaclave}
+
+Si el entorno no es estacionario (las probabilidades de los proveedores cambian con el tiempo), reemplazamos $\frac{1}{n}$ por una tasa constante $\alpha \in (0, 1]$, lo que confiere mayor peso exponencial a las observaciones más recientes.
+
+\section{El Dilema Exploración vs. Explotación: Métodos $\varepsilon$-Greedy}
+\begin{itemize}
+  \item \textbf{Explotación ($\text{greedy}$):} Seleccionar la acción con mayor valor estimado actual:
+  \begin{equation}
+    A_t^* = \arg\max_a Q_t(a)
+  \end{equation}
+  Aprovecha el conocimiento adquirido para obtener recompensas inmediatas elevadas, pero corre el riesgo de ignorar una acción superior aún no descubierta.
+  \item \textbf{Exploración:} Seleccionar deliberadamente una acción subóptima según los datos actuales para recopilar información y mejorar las estimaciones futuras.
+\end{itemize}
+
+El algoritmo $\varepsilon$-greedy equilibra ambas necesidades de forma sencilla y elegante:
+\begin{equation}
+  A_t = \begin{cases}
+    \text{acción aleatoria uniforme en } \mathcal{A}, & \text{con probabilidad } \varepsilon, \\
+    \arg\max_a Q_t(a), & \text{con probabilidad } 1 - \varepsilon.
+  \end{cases}
+\end{equation}
+
+\begin{calculomanual}
+Supongamos que OptiBot tiene la tabla de valores $Q = [0.0, 0.0, 0.0, 0.0]$ y elige el Proveedor B ($a=2$).
+\begin{enumerate}
+  \item Observa una recompensa $R_1 = 5.2$. Como $N(B)=1$:
+  \[
+    Q_2(B) = 0.0 + \frac{1}{1}(5.2 - 0.0) = \mathbf{5.20}
+  \]
+  \item En el siguiente paso, elige de nuevo el Proveedor B y obtiene $R_2 = 4.4$. Ahora $N(B)=2$:
+  \[
+    Q_3(B) = 5.20 + \frac{1}{2}(4.4 - 5.20) = 5.20 - 0.40 = \mathbf{4.80}
+  \]
+  \item En el tercer paso explora el Proveedor A ($a=1$) y obtiene $R_3 = 3.0$. Ahora $N(A)=1$:
+  \[
+    Q_4(A) = 0.0 + \frac{1}{1}(3.0 - 0.0) = \mathbf{3.00}
+  \]
+\end{enumerate}
+La tabla actualizada es $Q = [3.00, 4.80, 0.00, 0.00]$. El agente explota correctamente a B con probabilidad $1-\varepsilon$, pero mantiene la capacidad de probar C y D.
+\end{calculomanual}
+
+\section{Implementación en Python}
+A continuación implementamos el agente de bandidos multi-brazo completo en Python:
+
+\begin{lstlisting}[style=rlcode]
+import numpy as np
+import matplotlib.pyplot as plt
+
+class BanditOptiBot:
+    def __init__(self, k=4, epsilon=0.1, alpha=None):
+        self.k = k
+        self.epsilon = epsilon
+        self.alpha = alpha
+        self.q_true = np.array([3.2, 4.8, 2.1, 4.1]) # Valores reales ocultos
+        self.Q = np.zeros(k)
+        self.N = np.zeros(k)
+
+    def select_action(self):
+        if np.random.rand() < self.epsilon:
+            return np.random.randint(self.k)
+        return np.argmax(self.Q)
+
+    def step(self, action):
+        # Recompensa estocastica con ruido gaussiano
+        reward = np.random.normal(loc=self.q_true[action], scale=1.0)
+        self.N[action] += 1
+        step_size = self.alpha if self.alpha is not None else (1.0 / self.N[action])
+        self.Q[action] += step_size * (reward - self.Q[action])
+        return reward
+
+# Simulacion de 2,000 despachos
+bot = BanditOptiBot(k=4, epsilon=0.10)
+rewards = []
+for t in range(2000):
+    a = bot.select_action()
+    r = bot.step(a)
+    rewards.append(r)
+
+print("Estimaciones finales Q:", np.round(bot.Q, 3))
+print("Veces seleccionado cada proveedor:", bot.N)
+\end{lstlisting}
+
+\begin{notabox}
+\textbf{La limitación que motiva el siguiente capítulo:} En el problema de los bandidos, el agente toma decisiones, pero \textbf{el mundo nunca cambia de estado}. Todas las decisiones ocurren en el mismo vacío estático. En la vida real, los sistemas evolucionan: los equipos se desgastan y el entorno transita por diferentes estados físicos. Ese fenómeno dinámico es el objeto de estudio de las \textbf{Cadenas de Markov}.
+\end{notabox}

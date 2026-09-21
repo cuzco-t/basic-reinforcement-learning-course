@@ -1,0 +1,40 @@
+\frametitle{Estructura de DQN en PyTorch}
+\begin{columns}[T,onlytextwidth]
+    \column{0.64\textwidth}
+\begin{lstlisting}[style=rlcode]
+import torch
+import torch.nn as nn
+
+class QNetwork(nn.Module):
+    def __init__(self, state_dim, action_dim):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(state_dim, 64),
+            nn.ReLU(),
+            nn.Linear(64, 64),
+            nn.ReLU(),
+            nn.Linear(64, action_dim)
+        )
+    def forward(self, x):
+        return self.net(x)
+
+# Calculo de perdida con Replay Buffer
+states, actions, rewards, next_states, dones = replay_buffer.sample(32)
+with torch.no_grad():
+    # Objetivo con Target Network congelada
+    max_next_q = target_net(next_states).max(1)[0].unsqueeze(1)
+    target = rewards + gamma * (1 - dones) * max_next_q
+
+current_q = online_net(states).gather(1, actions)
+loss = nn.MSELoss()(current_q, target)
+\end{lstlisting}
+    \column{0.33\textwidth}
+      \begin{block}{Entrenamiento Estable}
+        \begin{enumerate}
+          \item Muestrear batch.
+          \item Calcular target fijo.
+          \item Backpropagation en $\theta$.
+          \item Actualizar periódicamente $\theta^- \leftarrow \theta$.
+        \end{enumerate}
+      \end{block}
+  \end{columns}

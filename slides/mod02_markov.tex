@@ -1,0 +1,141 @@
+% ============================================================
+% MÓDULO 2: CADENAS DE MARKOV
+% ============================================================
+\section{M2 · Cadenas de Markov}
+\module{Módulo 2: Cadenas de Markov}{Modelando la evolución estocástica del entorno cuando no podemos intervenir}
+
+\begin{frame}{OptiBot y la Cinta Transportadora}
+  \begin{columns}[c,onlytextwidth]
+    \column{0.50\textwidth}
+      \textbf{El Escenario: Inspección de Rodillos}
+      \begin{itemize}
+        \item OptiBot vigila la cinta central de paquetes.
+        \item Los rodamientos pasan por 3 estados:
+        \begin{enumerate}
+          \item \state{Nuevo ($N$)}
+          \item \state{Desgastado ($D$)}
+          \item \state{Averiado ($A$)}
+        \end{enumerate}
+        \item Al final de cada turno se inspeccionan.
+        \item \textbf{Pregunta:} Si hoy está nuevo, ¿cuál es la probabilidad de que esté averiado en 2 turnos?
+      \end{itemize}
+    \column{0.48\textwidth}
+      \centering
+      \begin{tikzpicture}[scale=0.85,transform shape,
+        st/.style={circle,draw=Ink,fill=Teal!12,thick,minimum size=1.1cm,font=\bfseries},
+        edge/.style={-{Latex[length=2.5mm]},thick,SoftText}]
+        \node[st] (N) at (0,2) {$N$};
+        \node[st,fill=Gold!25] (D) at (2.5,2) {$D$};
+        \node[st,fill=Coral!20] (A) at (1.25,0) {$A$};
+
+        \draw[edge] (N) to[loop left] node[left] {$0.7$} (N);
+        \draw[edge,Teal] (N) to[bend left=15] node[above] {$0.2$} (D);
+        \draw[edge] (N) to[bend right=15] node[below left] {$0.1$} (A);
+
+        \draw[edge] (D) to[loop right] node[right] {$0.6$} (D);
+        \draw[edge,Coral] (D) to[bend left=15] node[below right] {$0.3$} (A);
+        \draw[edge] (D) to[bend left=15] node[below] {$0.1$} (N);
+
+        \draw[edge] (A) to[loop below] node[below] {$0.9$} (A);
+        \draw[edge] (A) to[bend right=30] node[left] {$0.1$} (N);
+      \end{tikzpicture}
+  \end{columns}
+  \vspace{0.3cm}
+  \keyidea{La \textbf{Propiedad de Markov}: Dado el estado actual, el futuro es condicionalmente independiente del pasado.}
+\end{frame}
+
+\begin{frame}{La Matriz de Transición de Estados}
+  \begin{columns}[c,onlytextwidth]
+    \column{0.50\textwidth}
+      \begin{block}{Definición Formal}
+        Para cualquier secuencia de estados:
+        \[
+          P(S_{t+1} \mid S_t, S_{t-1}, \dots, S_0) = P(S_{t+1} \mid S_t)
+        \]
+      \end{block}
+      \vspace{0.2cm}
+      Agrupamos todas las probabilidades de transición en la matriz estocástica $P$:
+      \[
+        P_{ij} = P(S_{t+1} = j \mid S_t = i)
+      \]
+      \textbf{Regla de oro:} Cada fila debe sumar exactamente 1.
+    \column{0.46\textwidth}
+      \[
+        P = \begin{pmatrix}
+          0.7 & 0.2 & 0.1 \\
+          0.1 & 0.6 & 0.3 \\
+          0.1 & 0.0 & 0.9
+        \end{pmatrix}
+      \]
+      \begin{itemize}
+        \item Fila 1 ($N$): $0.7 + 0.2 + 0.1 = 1.0$
+        \item Fila 2 ($D$): $0.1 + 0.6 + 0.3 = 1.0$
+        \item Fila 3 ($A$): $0.1 + 0.0 + 0.9 = 1.0$
+      \end{itemize}
+      \vspace{0.2cm}
+      \small ¿Probabilidad en 2 pasos? Simplemente calculamos $P^2 = P \times P$.
+  \end{columns}
+\end{frame}
+
+\begin{frame}{Cálculo Manual: Distribución a 2 Pasos y Estado Estacionario}
+  \begin{columns}[T,onlytextwidth]
+    \column{0.48\textwidth}
+      \begin{exampleblock}{Cálculo a 2 turnos desde $N$}
+        Partiendo de $\mu_0 = [1, 0, 0]$:
+        \begin{align*}
+          \mu_1 &= \mu_0 P = [0.7, 0.2, 0.1] \\
+          \mu_2 &= \mu_1 P \\
+          P(A \text{ en } t=2) &= (0.7)(0.1) + (0.2)(0.3) + (0.1)(0.9) \\
+          &= 0.07 + 0.06 + 0.09 = \mathbf{0.22}
+        \end{align*}
+      \end{exampleblock}
+      \small Hay un $22\%$ de probabilidad de fallo al segundo turno.
+    \column{0.48\textwidth}
+      \begin{block}{Distribución Estacionaria $\pi^*$}
+        A largo plazo, el sistema alcanza el equilibrio:
+        \[
+          \pi^* P = \pi^* \quad \text{con} \quad \sum_i \pi^*_i = 1
+        \]
+      \end{block}
+      \vspace{0.2cm}
+      \small Nos dice qué porcentaje del tiempo la cinta pasará averiada, sin importar dónde comenzó.
+  \end{columns}
+  \vspace{0.35cm}
+  \keyidea{El estado estacionario describe la distribución de probabilidad invariante bajo la dinámica del sistema.}
+\end{frame}
+
+\begin{frame}[fragile]{Verificación Numérica en Python}
+  \begin{columns}[T,onlytextwidth]
+    \column{0.62\textwidth}
+\begin{lstlisting}[style=rlcode]
+import numpy as np
+
+P = np.array([
+    [0.7, 0.2, 0.1],
+    [0.1, 0.6, 0.3],
+    [0.1, 0.0, 0.9]
+])
+
+# Proyeccion a 2 turnos desde Nuevo
+mu_0 = np.array([1.0, 0.0, 0.0])
+mu_2 = mu_0 @ np.linalg.matrix_power(P, 2)
+print("Estado en t=2:", np.round(mu_2, 3))
+# [0.52 0.26 0.22] -> 22% de averia confirmada
+
+# Estado estacionario: autovector con autovalor 1
+evals, evecs = np.linalg.eig(P.T)
+stationary = evecs[:, np.isclose(evals, 1.0)].real
+stationary = stationary / np.sum(stationary)
+print("Distribucion estacionaria pi*:", np.round(stationary.T[0], 3))
+# [0.25 0.125 0.625]
+\end{lstlisting}
+    \column{0.35\textwidth}
+      \begin{alertblock}{La limitación de M2}
+        Ahora sabemos cómo evoluciona el mundo en el tiempo y podemos predecir el futuro.\\
+        \vspace{0.2cm}
+        \textbf{Pero somos espectadores pasivos}: OptiBot sólo mira la cinta romperse. No puede intervenir con acciones.\\
+        \vspace{0.2cm}
+        ¿Y si unimos las \textbf{acciones} de M1 con los \textbf{estados} de M2? $\to$ \textbf{¡MDP!}
+      \end{alertblock}
+  \end{columns}
+\end{frame}

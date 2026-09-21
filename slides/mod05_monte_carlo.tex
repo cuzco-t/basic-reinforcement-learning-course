@@ -1,0 +1,99 @@
+% ============================================================
+% MÓDULO 5: MÉTODOS MONTE CARLO
+% ============================================================
+\section{M5 · Monte Carlo}
+\module{Módulo 5: Métodos Monte Carlo}{Aprender de la experiencia sin modelo: promediando historias completas}
+
+\begin{frame}{El Cambio de Paradigma: Model-Free RL}
+  \begin{columns}[c,onlytextwidth]
+    \column{0.50\textwidth}
+      \textbf{El nuevo escenario de OptiBot:}
+      \begin{itemize}
+        \item No tenemos planos ni fórmulas matemáticas de transición.
+        \item El robot simplemente ejecuta un turno completo (\textbf{episodio}).
+        \item Registra la historia observada:
+        \[
+          S_0, A_0, R_1, S_1, A_1, R_2, \dots, S_T
+        \]
+        \item Al sonar la campana de fin de turno, calcula cuánto ganó a partir de cada estado visitado.
+      \end{itemize}
+    \column{0.48\textwidth}
+      \begin{beamercolorbox}[rounded=true,sep=0.8em]{block body}
+        \centering
+        {\large $V(s) \approx \frac{1}{N(s)} \sum_{i=1}^{N(s)} G_i(s)$}
+      \end{beamercolorbox}
+      \vspace{0.3cm}
+      \small Recordando el \textbf{Módulo 0}: El promedio muestral de retornos empíricos converge exactamente a la esperanza matemática $\mathbb{E}[G_t \mid S_t=s]$ por la Ley de Grandes Números.
+  \end{columns}
+  \vspace{0.4cm}
+  \keyidea{Monte Carlo no requiere conocer la física del entorno; sólo necesita \textbf{experiencia simulada o real}.}
+\end{frame}
+
+\begin{frame}{First-Visit MC y el Retorno hacia Atrás}
+  \begin{columns}[T,onlytextwidth]
+    \column{0.52\textwidth}
+      \begin{exampleblock}{Cálculo Manual Paso a Paso}
+        Trayectoria observada con $\gamma = 0.9$:
+        \begin{center}
+          $S_0 \xrightarrow{r_1=-1} S_1 \xrightarrow{r_2=-1} S_2 \xrightarrow{r_3=+10} \text{Meta}$
+        \end{center}
+        Calculamos los retornos acumulados \textbf{de atrás hacia adelante}:
+        \begin{align*}
+          G_2 &= r_3 = \mathbf{+10.0} \\
+          G_1 &= r_2 + \gamma G_2 = -1 + 0.9(10.0) = \mathbf{+8.0} \\
+          G_0 &= r_1 + \gamma G_1 = -1 + 0.9(8.0) = \mathbf{+6.2}
+        \end{align*}
+      \end{exampleblock}
+    \column{0.45\textwidth}
+      \begin{block}{First-Visit vs. Every-Visit}
+        \begin{itemize}
+          \item \textbf{First-Visit:} Se promedia $G_t$ sólo la primera vez que se visita el estado $s$ en el episodio. Estimador insesgado.
+          \item \textbf{Every-Visit:} Se promedia cada vez que se toca $s$. Ligeramente sesgado pero menor error cuadrático inicial.
+        \end{itemize}
+      \end{block}
+      \vspace{0.2cm}
+      \small Para control, estimamos $Q(s,a)$ para poder elegir la acción codiciosa sin requerir modelo.
+  \end{columns}
+\end{frame}
+
+\begin{frame}[fragile]{Control Monte Carlo $\varepsilon$-Greedy en Python}
+  \begin{columns}[T,onlytextwidth]
+    \column{0.62\textwidth}
+\begin{lstlisting}[style=rlcode]
+# Registro acumulado de retornos para cada par (s, a)
+returns = {(s, a): [] for s in states for a in actions}
+Q = np.zeros((n_states, n_actions))
+
+for ep in range(n_episodes):
+    trajectory = run_episode(policy, env)
+    G = 0
+    visited = set()
+    
+    # Recorrido de atras hacia adelante
+    for s, a, r in reversed(trajectory):
+        G = gamma * G + r
+        if (s, a) not in visited:
+            visited.add((s, a))
+            returns[(s, a)].append(G)
+            # Actualizacion de la tabla Q
+            Q[s, a] = np.mean(returns[(s, a)])
+            
+    # Mejora de politica epsilon-greedy
+    for s in states:
+        best_a = np.argmax(Q[s])
+        # Actualizar probabilidades de exploracion...
+\end{lstlisting}
+    \column{0.35\textwidth}
+      \begin{alertblock}{La limitación de M5}
+        Monte Carlo es insesgado y no necesita modelo.\\
+        \vspace{0.2cm}
+        \textbf{Pero tiene 2 problemas graves:}
+        \begin{enumerate}
+          \item \textbf{Alta varianza:} Un solo giro al final altera todos los retornos.
+          \item \textbf{Obligatoriamente episódico:} Debe esperar a que termine el día completo para actualizar el primer paso.
+        \end{enumerate}
+        \vspace{0.2cm}
+        ¿Podemos aprender \textbf{paso a paso} sin esperar al final? $\to$ \textbf{TD Learning (M6)}.
+      \end{alertblock}
+  \end{columns}
+\end{frame}

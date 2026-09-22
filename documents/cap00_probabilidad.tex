@@ -1,93 +1,188 @@
 \chapter{Probabilidad y Pensamiento Estocástico para RL}
 \label{cap:probabilidad}
 
-\section{Introducción: ¿Por qué Probabilidad antes de RL?}
-El libro clásico de Richard Sutton y Andrew Barto (\textit{Reinforcement Learning: An Introduction}) asume desde su segunda página que el lector comprende qué es una variable aleatoria, cómo se calcula una probabilidad condicional y qué significa el operador de esperanza matemática $\mathbb{E}[\cdot]$. Para un estudiante principiante, esta suposición suele convertirse en una barrera infranqueable.
+\section{¿Por qué la programación tradicional no basta?}
+En la programación informática convencional, las cosas ocurren de manera predecible y ordenada. Si se escribe una instrucción para sumar dos cantidades o para aplicar un descuento del 15\%, el resultado será siempre exacto y reproducible. Si ese código se ejecuta diez veces o un millón de veces, la computadora devolverá con certeza absoluta la misma respuesta.
 
-El Aprendizaje por Refuerzo no es más que la búsqueda de decisiones óptimas en mundos donde impera la incertidumbre. En el mundo real, los motores fallan con cierta frecuencia, el suelo mojado hace que las ruedas derrapen de manera no determinista y las recompensas externas varían día a día. Por tanto, antes de pedirle a un agente inteligente que aprenda, debemos aprender nosotros a describir y cuantificar la incertidumbre.
+Sin embargo, cuando una máquina o un robot intenta tomar decisiones en el mundo real, esa certeza desaparece por completo:
+\begin{itemize}
+  \item Una rueda puede patinar si el suelo tiene un poco de polvo, humedad o desgaste.
+  \item Un sensor de distancia puede reportar dos metros y, un instante después, indicar dos metros y diez centímetros debido a un simple reflejo de luz.
+  \item Un trayecto que usualmente toma tres minutos puede demorar diez si alguien dejó una caja bloqueando el pasillo.
+\end{itemize}
+
+Si se intentara programar una regla fija para cada uno de estos imprevistos, el código resultante sería infinito, frágil e inmanejable. Es aquí donde el Aprendizaje por Refuerzo recurre a la \textbf{probabilidad}: no como una colección de fórmulas abstractas para memorizar, sino como una brújula práctica que le permite a una máquina convivir con el azar, medir el riesgo y tomar decisiones inteligentes aunque no pueda predecir el futuro inmediato con exactitud.
 
 \begin{optibot}
-Presentamos a \textbf{OptiBot}: un robot autónomo para intralogística en un almacén inteligente. OptiBot recibe paquetes en la estación de empaque y debe entregarlos en los muelles de carga. Sin embargo:
-\begin{itemize}
-  \item Sus sensores ultrasónicos tienen un margen de error aleatorio.
-  \item El tráfico de otros operarios y montacargas introduce retrasos impredecibles.
-  \item Los distintos proveedores de mensajería tardan tiempos variables en procesar cada caja.
-\end{itemize}
-Para programar a OptiBot, no podemos exigir certezas absolutas (``el viaje tardará exactamente 4.00 minutos''). En su lugar, debemos trabajar con \textbf{distribuciones de probabilidad}.
+A lo largo del curso se seguirá a \textbf{OptiBot}, un robot encargado de transportar paquetes desde el área de empaque hasta los muelles de carga en un almacén.
+
+El entorno es cambiante: transitan personas, cruzan otros vehículos y surgen obstáculos imprevistos. Un programa con reglas fijas fallaría ante cualquier imprevisto. Para tomar decisiones acertadas, OptiBot necesita estimar probabilidades: saber qué eventos son comunes, cuáles representan riesgos y qué resultados esperar en promedio.
 \end{optibot}
 
-\section{Variables Aleatorias Discretas y Distribuciones}
-Una \textbf{variable aleatoria discreta} $X$ es una función que asigna un valor numérico real a cada resultado posible de un fenómeno aleatorio.
+\newpage
+\section{Variables Aleatorias: Ponerle números al azar}
+En el día a día ocurren eventos cuyo resultado final no se puede predecir con seguridad: el clima de mañana, el tiempo exacto que tardará un envío o la cara que mostrará una moneda al caer.
 
-El conjunto de todos los pares $(x, P(X=x))$ constituye su \textbf{función de masa de probabilidad} (o distribución), la cual satisface obligatoriamente dos condiciones axiomáticas:
+Para que una computadora pueda trabajar con esa incertidumbre, necesita transformar esos posibles resultados en valores numéricos. A esta herramienta se le denomina \textbf{variable aleatoria discreta} (representada convencionalmente con una letra mayúscula, como $X$):
+\begin{quote}
+  \textit{Una variable aleatoria es simplemente una regla que asigna un número a cada resultado posible de una situación incierta.}
+\end{quote}
+
+Por ejemplo, si se observa el tiempo de viaje que le toma a OptiBot llevar un paquete al muelle de carga, la variable aleatoria $T$ podría tomar los valores discretos de $1$, $2$ o $3$ ($t$) minutos.
+
+A cada uno de esos valores posibles se le asocia su \textbf{probabilidad} de ocurrir, denotada formalmente como $P(X = x)$ o $P(T = t)$ en el caso del tiempo de viaje. Para que esta distribución tenga sentido lógico, debe cumplir con dos condiciones de sentido común:
 \begin{enumerate}
-  \item $0 \le P(X = x) \le 1$ para todo resultado $x$.
-  \item $\sum_{x} P(X = x) = 1$, lo que expresa que con certeza matemática ocurrirá alguno de los resultados posibles.
+  \item \textbf{Las probabilidades se ubican siempre entre 0 y 1} (o entre 0\% y 100\%): No existen probabilidades negativas ni superiores al cien por ciento ($0 \le P(X = x) \le 1$). Si algo es imposible su probabilidad es 0; si es una certeza total, su probabilidad es 1.
+  \item \textbf{La suma de todos los casos posibles es igual a 1}: Si se toman en cuenta todos los resultados que pueden llegar a presentarse, es un hecho indiscutible que alguno de ellos terminará ocurriendo:
+  \begin{equation}
+    \sum_{x} P(X = x) = 1
+  \end{equation}
 \end{enumerate}
 
-\section{Probabilidad Condicional y la Ley de Probabilidad Total}
-La probabilidad condicional formaliza la noción de actualización del conocimiento. Si sabemos con certeza que un evento $A$ ha ocurrido (con $P(A) > 0$), la probabilidad de que ocurra $B$ se redefine como:
+\subsection*{Ejemplo: La distribución de tiempos de viaje de OptiBot}
+Para ilustrar estos conceptos de forma concreta, supóngase que se cronometran $100$ viajes de OptiBot transportando paquetes hacia el muelle de carga. Al clasificar los tiempos registrados, se obtiene el siguiente desglose:
+
+\begin{center}
+\begin{tabular}{ccc}
+  \toprule
+  \textbf{Tiempo de viaje ($t$)} & \textbf{Viajes observados} & \textbf{Probabilidad $P(T = t)$} \\
+  \midrule
+  $t = 1$ minuto  & 20 de 100 viajes & $P(T = 1) = 0.20$ \ ($20\%$) \\
+  $t = 2$ minutos & 50 de 100 viajes & $P(T = 2) = 0.50$ \ ($50\%$) \\
+  $t = 3$ minutos & 30 de 100 viajes & $P(T = 3) = 0.30$ \ ($30\%$) \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+A partir de estos datos, se comprueban inmediatamente las dos propiedades obligatorias:
+\begin{enumerate}
+  \item Cada probabilidad es un valor real entre 0 y 1 ($0.20$, $0.50$ y $0.30$).
+  \item La suma de todas las alternativas posibles totaliza la certeza absoluta ($1.00$ o $100\%$):
+  \begin{equation*}
+    P(T = 1) + P(T = 2) + P(T = 3) = 0.20 + 0.50 + 0.30 = 1.00
+  \end{equation*}
+\end{enumerate}
+
+Esta tabla describe la \textbf{distribución de probabilidad} de la variable $T$. Aunque no se puede adivinar con exactitud cuántos minutos tomará el próximo viaje en particular, el sistema ahora sabe que lo más habitual es tardar 2 minutos ($50\%$ de probabilidad), mientras que los viajes veloces de 1 minuto ocurrirán solo una de cada cinco veces ($20\%$).
+
+\section{Probabilidad Condicional: Aprender con nueva información}
+Las probabilidades rara vez permanecen fijas en el tiempo. Casi siempre se modifican en cuanto se obtiene nueva información del entorno.
+
+Considérese un ejemplo cotidiano del almacén: ¿cuál es la probabilidad de que una rueda de OptiBot resbale? En condiciones normales es muy baja, tal vez de un $2\%$. Pero si los sensores detectan que el piso acaba de ser limpiado con jabón, esa probabilidad se incrementa de inmediato a un $40\%$. La probabilidad cambió radicalmente porque se obtuvo un dato clave sobre la situación actual del entorno.
+
+Esta noción se expresa a través de la \textbf{probabilidad condicional}. La probabilidad de que ocurra un evento $B$, dado que ya ocurrió o se conoce la ocurrencia previa del evento $A$, se escribe $P(B \mid A)$ y se calcula mediante:
 \begin{equation}
   P(B \mid A) = \frac{P(A \cap B)}{P(A)}
 \end{equation}
+Donde $P(A \cap B)$ representa la probabilidad de que ambos eventos ocurran de manera conjunta. En el Aprendizaje por Refuerzo, esta fórmula es la piedra angular de todo el razonamiento: el agente se pregunta en cada paso: \textit{«¿Cuál es la probabilidad de alcanzar una meta exitosa ($B$), dado que se decidió ejecutar la acción de girar a la izquierda ($A$)?»}.
 
-Cuando el espacio muestral se particiona en una colección de eventos disjuntos $A_1, A_2, \dots, A_n$ cuya unión es el espacio total, la \textbf{Ley de Probabilidad Total} establece que:
+\subsection*{Ejemplo: Cálculo numérico de probabilidad condicional}
+Para observar cómo opera esta fórmula en la práctica, considérese un registro histórico de $100$ despachos realizados por OptiBot:
+\begin{itemize}
+  \item Se define el evento $A$: \textit{«El robot toma la ruta del pasillo central»}. Esto ocurrió en $40$ de los $100$ viajes, por lo que $P(A) = \frac{40}{100} = 0.40$ ($40\%$).
+  \item Se define el evento $B$: \textit{«El viaje sufre una demora considerable»}.
+  \item Se constató que en $16$ de esos $100$ viajes el robot tomó el pasillo central \textbf{y además} sufrió la demora. Es decir, la probabilidad conjunta es $P(A \cap B) = \frac{16}{100} = 0.16$ ($16\%$).
+\end{itemize}
+
+Si OptiBot decide ingresar al pasillo central, ¿cuál es la probabilidad de que termine demorándose? Aplicando la definición de probabilidad condicional:
+\begin{equation*}
+  P(B \mid A) = \frac{P(A \cap B)}{P(A)} = \frac{0.16}{0.40} = 0.40 \quad (40\%)
+\end{equation*}
+
+\textbf{Interpretación práctica:} En todo el almacén, la probabilidad general de sufrir demoras tal vez sea de apenas un $24\%$. No obstante, en cuanto se confirma que el robot eligió el pasillo central (evento $A$), el riesgo de demora se eleva automáticamente al $40\%$. Esta actualización de probabilidades es la que le permite al agente aprender qué acciones son seguras y cuáles aumentan el riesgo de penalización.
+
+\subsection{La Ley de Probabilidad Total}
+En muchas ocasiones se desea determinar la probabilidad general de que ocurra un suceso, sabiendo que este puede ocurrir a través de distintas rutas o circunstancias intermedias.
+
+Si OptiBot puede desplazarse hacia el muelle de carga eligiendo entre tres rutas alternativas como el pasillo central, el pasillo norte o el pasillo sur; la probabilidad total de que ocurra un evento (como sufrir una demora) se obtiene evaluando cada alternativa por separado y sumando sus contribuciones ponderadas:
 \begin{equation}
   P(B) = \sum_{i=1}^n P(B \mid A_i) \cdot P(A_i)
 \end{equation}
-Esta suma ponderada es exactamente el mecanismo que utilizaremos en el Capítulo~\ref{cap:mdp} para deducir la Ecuación de Expectativa de Bellman.
+En términos prácticos: se calcula la probabilidad de que ocurra el evento en cada camino posible, se multiplica por la frecuencia con la que se transita por dicho camino, y se suman todas esas partes.
 
-\section{El Concepto Fundamental: Valor Esperado}
-El \textbf{valor esperado} (o media teórica) de una variable aleatoria discreta $X$ es el promedio ponderado de todos sus valores posibles, ponderados por sus probabilidades de ocurrencia:
+\subsection*{Ejemplo: Probabilidad total de sufrir demoras en el almacén}
+Siguiendo con el caso de OptiBot, supóngase que el robot dispone de tres rutas posibles hacia el muelle de carga ($A_1$, $A_2$ y $A_3$):
+\begin{itemize}
+  \item \textbf{Pasillo Central ($A_1$):} Es la ruta directa. OptiBot la utiliza el $40\%$ de las veces ($P(A_1) = 0.40$). Como se analizó en el ejemplo anterior, al ser muy concurrida presenta una probabilidad de demora del $40\%$ ($P(B \mid A_1) = 0.40$).
+  \item \textbf{Pasillo Norte ($A_2$):} Es una ruta más amplia y despejada. El robot la utiliza también el $40\%$ de las veces ($P(A_2) = 0.40$). En este pasillo la probabilidad de demora es baja, de solo un $10\%$ ($P(B \mid A_2) = 0.10$).
+  \item \textbf{Pasillo Sur ($A_3$):} Es una ruta secundaria que se emplea el $20\%$ restante de las veces ($P(A_3) = 0.20$). Su probabilidad de demora es intermedia, del $20\%$ ($P(B \mid A_3) = 0.20$).
+\end{itemize}
+
+Para hallar la probabilidad total de que un viaje sufra demoras, sin importar qué pasillo haya elegido el robot, se aplica la Ley de Probabilidad Total:
+\begin{align*}
+  P(B) &= P(B \mid A_1) \cdot P(A_1) + P(B \mid A_2) \cdot P(A_2) + P(B \mid A_3) \cdot P(A_3) \\
+  &= (0.40 \times 0.40) + (0.10 \times 0.40) + (0.20 \times 0.20) \\
+  &= 0.16 + 0.04 + 0.04 \\
+  &= \mathbf{0.24 \quad (24\%)}
+\end{align*}
+
+\textbf{Conclusión didáctica:} En promedio, el $24\%$ de todos los viajes en el almacén sufrirán demoras. Esta visión global le permite al algoritmo comprender el rendimiento general de su entorno antes de comenzar a optimizar qué porcentaje de viajes le conviene destinar a cada pasillo.
+
+\begin{ideaclave}
+Esta suma ponderada no es una curiosidad abstracta. Representa el núcleo matemático sobre el cual se construyen los algoritmos de decisión en Inteligencia Artificial. En el Capítulo~\ref{cap:mdp}, se comprobará que la célebre \textbf{Ecuación de Bellman} aplica exactamente esta misma lógica para calcular el valor de cualquier estado futuro.
+\end{ideaclave}
+
+\section{El Concepto Más Importante: El Valor Esperado}
+Si una persona compra un boleto de lotería y gana un premio pequeño, cometería una equivocación grave si concluyera que comprar lotería todos los días es una inversión financiera rentable. Juzgar una estrategia basándose únicamente en el resultado de un intento aislado suele conducir a decisiones erróneas.
+
+En el Aprendizaje por Refuerzo, a un robot no le interesa ganar una recompensa por pura casualidad en una sola ocasión; lo que busca es encontrar una estrategia que produzca los mejores resultados posibles \textbf{en promedio a largo plazo}. Para medir este rendimiento sostenido se utiliza el \textbf{valor esperado} (denotado matemáticamente como $\mathbb{E}[X]$):
 \begin{equation}
   \mathbb{E}[X] \doteq \sum_{x} x \cdot P(X = x)
 \end{equation}
+El símbolo $\doteq$ (un signo de igual con un punto encima) es una convención muy común en la literatura de Aprendizaje por Refuerzo y significa simplemente \textbf{«se define como»}. Indica que la fórmula no es el resultado de un despeje matemático previo, sino la propia definición fundamental del concepto.
 
-\begin{ideaclave}
-El valor esperado no representa necesariamente un valor que ocurrirá en un intento individual. Representa el \textbf{centro de gravedad} del fenómeno a largo plazo: el promedio que obtendríamos si repitiéramos el experimento un número infinito de veces.
-\end{ideaclave}
+El valor esperado no pretende adivinar qué valor exacto se observará en el siguiente viaje; lo que indica con precisión es el promedio al que tenderán los resultados si la acción se repite cientos o miles de veces bajo condiciones similares.
 
-\begin{calculomanual}
-Supongamos que OptiBot evalúa las ganancias netas que produce entregar un paquete según el tiempo de demora del mensajero:
+\subsection*{Ejemplo: Cálculo del valor esperado en los envíos de OptiBot}
+Para comprender cómo se aplica esta fórmula en la toma de decisiones, considérese el balance económico diario de OptiBot al transportar pedidos hacia los camiones de reparto. Se presentan tres escenarios posibles en cada viaje:
 \begin{itemize}
-  \item Entrega rápida (1 día): ganancia neta de $+\$10$ (probabilidad $0.30$).
-  \item Entrega normal (2 días): ganancia neta de $+\$5$ (probabilidad $0.50$).
-  \item Entrega tardía con reclamo (3 días): penalización neta de $-\$2$ (probabilidad $0.20$).
+  \item \textbf{Entrega rápida (10 minutos):} el cliente abona una tarifa preferencial y deja una ganancia neta de $+\$10$. Esto ocurre el $26\%$ de las veces ($P = 0.26$).
+  \item \textbf{Entrega regular (20 minutos):} el viaje se completa dentro del horario estándar y deja una ganancia de $+\$5$. Esto ocurre el $50\%$ de las veces ($P = 0.50$).
+  \item \textbf{Entrega con demora (más de 30 minutos):} el almacén debe compensar al cliente con un cupón, resultando en una pérdida de $-\$2$. Esto ocurre el $24\%$ de las veces ($P = 0.24$).
 \end{itemize}
-Calculamos el valor esperado de ganancia $\mathbb{E}[G]$ a mano:
-\begin{align*}
-  \mathbb{E}[G] &= (10)(0.30) + (5)(0.50) + (-2)(0.20) \\
-  &= 3.00 + 2.50 - 0.40 \\
-  &= \mathbf{\$5.10 \text{ por paquete}}
-\end{align*}
-A largo plazo, por cada 1,000 paquetes despachados bajo esta política, OptiBot generará aproximadamente $\$5,100$ de beneficio neto.
-\end{calculomanual}
 
-\section{Implementación en Python: Verificación Empírica}
-La \textbf{Ley de los Grandes Números} garantiza que, a medida que el número de ensayos $N \to \infty$, la media muestral $\bar{X}_N = \frac{1}{N}\sum_{i=1}^N X_i$ converge casi con seguridad al valor esperado teórico $\mathbb{E}[X]$.
+Para calcular cuánta ganancia genera OptiBot en promedio por cada paquete transportado, se multiplica cada resultado económico por su respectiva probabilidad y se suman:
+\begin{align*}
+  \mathbb{E}[\text{Ganancia}] &= (10 \times 0.26) + (5 \times 0.50) + (-2 \times 0.24) \\
+  &= 2.60 + 2.50 - 0.48 \\
+  &= \mathbf{\$4.62 \text{ por paquete}}
+\end{align*}
+
+\textbf{Conclusión didáctica:} Obsérvese un detalle fundamental: \textbf{ningún paquete individual produce exactamente $\$4.62$}. Cada envío aislado deja una ganancia de $\$10$, de $\$5$ o una pérdida de $-\$2$. Sin embargo, si OptiBot transporta 1,000 paquetes a lo largo del mes, la empresa habrá acumulado aproximadamente $\$4,620$. Esta cifra promedio es la que le permite al algoritmo decidir objetivamente si una ruta o una política de trabajo es beneficiosa.
+
+\section{De la Teoría al Código: Ley de los Grandes Números}
+Una duda natural es: ¿realmente se cumple este promedio teórico cuando el sistema opera en la práctica?
+
+La \textbf{Ley de los Grandes Números} responde afirmativamente: a medida que un experimento se repite una gran cantidad de veces, la media observada en la realidad se aproxima de manera casi perfecta al valor esperado teórico calculado en el papel.
+
+El siguiente programa en Python simula el trabajo de OptiBot realizando 50,000 despachos en el almacén para verificar experimentalmente si el promedio empírico coincide con los $\$4.62$ calculados a mano:
 
 \begin{lstlisting}[style=rlcode]
 import numpy as np
 
-# Definicion de la variable aleatoria
+# 1. Definicion de los resultados posibles y sus probabilidades
 ganancias = np.array([10.0, 5.0, -2.0])
-probabilidades = np.array([0.30, 0.50, 0.20])
+probabilidades = np.array([0.26, 0.50, 0.24])
 
-# 1. Valor esperado teorico
+# 2. Computo del valor esperado teorico
 E_teorico = np.sum(ganancias * probabilidades)
 print(f"Valor Esperado Teorico: ${E_teorico:.2f}")
 
-# 2. Simulacion estocastica de 50,000 paquetes en OptiBot
+# 3. Simulacion de 50,000 despachos realizados por OptiBot
 np.random.seed(42)
-muestras = np.random.choice(ganancias, size=50000, p=probabilidades)
-E_empirico = np.mean(muestras)
-print(f"Promedio Empirico (N=50000): ${E_empirico:.2f}")
+despachos = np.random.choice(ganancias, size=50000, p=probabilidades)
 
-# Error absoluto de estimacion
-error = abs(E_teorico - E_empirico)
-print(f"Diferencia: ${error:.4f}")
+# 4. Promedio real obtenido a partir de la simulacion
+promedio_observado = np.mean(despachos)
+print(f"Promedio Real Observado (50,000 entregas): ${promedio_observado:.2f}")
+
+# 5. Comparacion entre la prediccion teorica y el resultado practico
+diferencia = abs(E_teorico - promedio_observado)
+print(f"Diferencia absoluta: ${diferencia:.4f}")
 \end{lstlisting}
 
+Al ejecutar la simulación, se comprueba que el promedio observado difiere del valor teórico por menos de dos centavos de dólar. Si agrega un cero al número de iteraciones de la simulación, la diferencia será mucho menor y el valor teórico sera prácticamente igual al valor observado.
+
 \begin{notabox}
-Con esta base probabilística sólidamente asentada, estamos listos para abordar el primer problema de decisión activa: ¿cómo debe actuar OptiBot cuando se enfrenta a opciones con recompensas inciertas y desea maximizar su ganancia esperada acumulada?
+Con esta base conceptual, el azar deja de ser un obstáculo desconcertante y se transforma en una variable cuantificable y predecible a gran escala. En el Capítulo~\ref{cap:bandidos}, estas herramientas permitirán analizar el primer problema clásico del aprendizaje por refuerzo: cómo debe actuar un agente inteligente ante el dilema entre \textbf{explotar} una opción que ya sabe que funciona o \textbf{explorar} nuevas alternativas para descubrir si ofrecen ganancias superiores.
 \end{notabox}

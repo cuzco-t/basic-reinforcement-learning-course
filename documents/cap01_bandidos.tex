@@ -1,129 +1,197 @@
 \chapter{El Problema de los Bandidos Multi-Brazo}
 \label{cap:bandidos}
 
-\section{La Esencia del Aprendizaje por Refuerzo}
-A diferencia del aprendizaje supervisado, donde un maestro externo proporciona la etiqueta correcta para cada entrada, en el Aprendizaje por Refuerzo el agente recibe una señal \textbf{evaluativa} (una recompensa numérica), pero nunca \textbf{instructiva} (nadie le dice cuál habría sido la mejor acción posible).
+\section{El Dilema Fundamental: Exploración frente a Explotación}
+La toma de decisiones en entornos inciertos plantea una disyuntiva constante: el conflicto entre la \textbf{exploración} y la \textbf{explotación}. Este problema se manifiesta siempre que un agente (como un robot o un algoritmo) debe elegir entre dos alternativas opuestas:
+\begin{enumerate}
+  \item \textbf{Explotación:} Elegir la opción que ha demostrado el mejor rendimiento hasta el momento, con el fin de asegurar una ganancia o beneficio ya conocido.
+  \item \textbf{Exploración:} Probar alternativas distintas cuyo rendimiento todavía no se conoce con certeza, asumiendo el riesgo de obtener un mal resultado a cambio de la oportunidad de descubrir una opción superior.
+\end{enumerate}
 
-Para aislar esta dinámica de aprendizaje sin la complicación añadida del movimiento espacial, Sutton y Barto introducen el problema del \textbf{Bandido de $k$-brazos} (\textit{$k$-armed bandit}). En este escenario existe un único estado estático: el agente debe elegir repetidamente una acción entre $k$ opciones disponibles, recibiendo una recompensa numérica extraída de una distribución de probabilidad fija pero desconocida.
+Para evaluar el resultado de cada elección, el entorno devuelve una señal numérica de beneficio o costo, denotada convencionalmente como $R_t$ (del término en inglés \textit{reward} o retorno): un valor positivo representa una ganancia o premio, mientras que un valor negativo refleja una penalización o costo.
+
+Para visualizar este dilema de forma intuitiva, considérese la situación ilustrada en la Figura~\ref{fig:exploitation_vs_explorationb}, donde un agente se encuentra frente a una bifurcación en un laberinto. Si el agente se limita a explotar su conocimiento previo, repetirá una y otra vez el camino hacia el cofre, perdiéndose para siempre la posibilidad de encontrar el diamante. Por el contrario, si se dedica exclusivamente a explorar senderos desconocidos, correrá el riesgo constante de elegir rutas vacías o peligrosas sin llegar a consolidar sus ganancias. El verdadero desafío del Aprendizaje por Refuerzo radica en balancear inteligentemente ambas actitudes.
+
+\begin{figure}[!htb]
+  \centering
+  \includegraphics[width=0.82\textwidth]{figures/cap01/exploitation_vs_exploration.png}
+  \caption{Dilema entre exploración y explotación en un laberinto. Al optar por la \textbf{explotación} (camino inferior), el agente sigue las huellas conocidas hacia un cofre seguro con una ganancia ya comprobada. En cambio, si decide \textbf{explorar} (camino superior), asume la incertidumbre de adentrarse en un sendero nuevo que desconoce, lo que le brinda la oportunidad de descubrir un beneficio potencialmente superior (el diamante brillante).}
+  \label{fig:exploitation_vs_explorationb}
+\end{figure}
+
+\section{El Problema del Bandido Multi-Brazo ($k$-Armed Bandit)}
+Para comprender el conflicto entre explorar y explotar sin enredarse con mapas o laberintos complejos, el Aprendizaje por Refuerzo parte del modelo más simple que existe: el \textbf{Bandido Multi-Brazo}.
+
+Este nombre tan particular surge de una comparación clásica con los casinos. En inglés, a las máquinas tragamonedas tradicionales se las llama comúnmente «bandidos de un brazo» (\textit{one-armed bandits}), ya que funcionan con una palanca lateral (un «brazo») y suelen quedarse con las monedas de los jugadores. Cuando se tienen varias máquinas alineadas (o una sola máquina con varias palancas), se forma un «bandido de múltiples brazos».
+
+\subsection*{Ejemplo: Las máquinas tragamonedas del casino}
+Para entender cómo funciona este escenario, considérese a una persona frente a una fila de $k$ máquinas tragamonedas:
+\begin{itemize}
+  \item Cada máquina entrega premios al azar, pero no todas pagan igual: algunas son generosas con frecuencia, mientras que otras casi nunca dan nada. El jugador no sabe de antemano cuál es la más conveniente.
+  \item El jugador cuenta con una cantidad fija de monedas y, en cada intento, solo puede accionar una sola palanca.
+  \item Supóngase que en su primer intento jala la palanca de la máquina \#1 y gana $\$5$.
+\end{itemize}
+
+En ese mismo instante aparece el dilema:
+\begin{itemize}
+  \item \textbf{Si opta por la explotación:} Puede seguir jugando siempre en la máquina \#1 para asegurarse esa ganancia conocida de $\$5$ por jugada. Sin embargo, nunca descubrirá si la máquina \#3 entrega en promedio premios mucho mayores, como $\$20$.
+  \item \textbf{Si opta por la exploración:} Probará las demás máquinas para averiguar cuánto pagan realmente, asumiendo el riesgo de perder monedas en opciones malas que apenas entreguen beneficios.
+\end{itemize}
+
+\section{Retroalimentación Evaluativa e Instructiva}
+Una distinción conceptual esencial entre el aprendizaje supervisado convencional y el aprendizaje por refuerzo reside en el tipo de retroalimentación que recibe el sistema:
+\begin{itemize}
+  \item En el \textbf{aprendizaje supervisado}, el sistema recibe una señal \textbf{instructiva}: existe una respuesta correcta predeterminada (una etiqueta) que indica explícitamente cuál debió haber sido la salida ideal.
+  \item En el \textbf{aprendizaje por refuerzo}, no hay un tutor que indique la respuesta óptima. El agente recibe una señal puramente \textbf{evaluativa}: el entorno devuelve un valor numérico $R_t$ que califica el desempeño de la acción tomada, pero no le dice al agente si alguna de las otras opciones disponibles habría producido un mejor resultado.
+\end{itemize}
+El agente debe, por tanto, descubrir de manera autónoma cuáles decisiones resultan más rentables mediante la interacción directa y el método de prueba y error.
 
 \begin{optibot}
-OptiBot se encuentra instalado en la estación central de despacho. Por cada paquete que sale de la cinta, debe seleccionar una de \textbf{4 empresas de mensajería}:
+En el centro logístico, OptiBot opera en la estación de despacho. Ante cada paquete que finaliza su proceso de embalaje, el robot debe seleccionar una de \textbf{4 empresas de mensajería} disponibles:
 \begin{itemize}
-  \item \textbf{Proveedor A:} Tiempo rápido, pero cobra recargos ocasionales ($q_*(A) = 3.2$).
-  \item \textbf{Proveedor B:} El más eficiente y rentable en promedio ($q_*(B) = 4.8$).
-  \item \textbf{Proveedor C:} Económico pero con frecuentes averías y retrasos ($q_*(C) = 2.1$).
-  \item \textbf{Proveedor D:} Servicio premium constante ($q_*(D) = 4.1$).
+  \item \textbf{Proveedor A:} Costos moderados y tiempos estables.
+  \item \textbf{Proveedor B:} Servicio eficiente con la mayor rentabilidad esperada promedio.
+  \item \textbf{Proveedor C:} Tarifas reducidas pero con alta tasa de demoras y penalizaciones.
+  \item \textbf{Proveedor D:} Servicio premium constante con costos elevados.
 \end{itemize}
-OptiBot \textbf{no conoce} estos valores teóricos $q_*$. Cada vez que selecciona un proveedor, observa la ganancia neta obtenida $R_t$. Su meta es maximizar la ganancia total acumulada a lo largo de 1,000 despachos.
+OptiBot \textbf{no dispone a priori} de los rendimientos esperados de cada empresa. Cada despacho genera una ganancia o pérdida neta $R_t$ sujeta a fluctuaciones estocásticas. El objetivo del robot consiste en maximizar el beneficio acumulado a lo largo de un horizonte de 2,000 despachos.
 \end{optibot}
 
-\section{Valor de Acción y Estimación de Recompensas}
-Denotamos la acción elegida en el instante de tiempo $t$ como $A_t$ y la recompensa resultante como $R_t$. El \textbf{valor verdadero} de una acción arbitraria $a$, denotado $q_*(a)$, se define formalmente como la esperanza condicionada:
+\section{Valor de Acción y Estimación del Rendimiento: $q_*(a)$}
+Para tomar buenas decisiones, el agente necesita evaluar qué tan conveniente es cada opción. En cada paso de tiempo $t$ (cada turno o despacho), intervienen dos variables fundamentales:
+\begin{itemize}
+  \item $A_t$: la \textbf{acción} seleccionada por el agente en el instante $t$ (por ejemplo, elegir una empresa de mensajería o tirar de una palanca).
+  \item $R_t$: la \textbf{recompensa} numérica recibida inmediatamente después como consecuencia de esa acción (puede ser una ganancia o un costo).
+\end{itemize}
+
+\subsection*{1. El valor real u objetivo: $q_*(a)$}
+Cada acción posible $a$ dentro del conjunto de opciones disponibles $\mathcal{A}$ tiene un \textbf{valor verdadero}, denotado como $q_*(a)$. Este valor representa la recompensa promedio teórica que obtendríamos a largo plazo si eligiéramos esa misma acción infinitas veces. Matemáticamente se define como:
 \begin{equation}
   q_*(a) \doteq \mathbb{E}\left[ R_t \mid A_t = a \right]
 \end{equation}
-Dado que el agente desconoce $q_*(a)$, mantiene una estimación en el paso $t$, denotada como $Q_t(a)$. Si el agente selecciona una acción $a$ un total de $N_t(a)$ veces hasta el tiempo $t$, la estimación más natural es el promedio de las recompensas recibidas:
+
+\noindent \textbf{¿Cómo se lee y qué significa cada símbolo de esta ecuación?}
+\begin{itemize}
+  \item $q_*(a)$ (\textit{«q-estrella de a»}): Es el \textbf{valor real y objetivo} de la acción $a$. El asterisco $*$ indica que es el valor perfecto o de referencia (la verdad oculta en el entorno).
+  \item $\doteq$ (\textit{«se define como»}): Este signo de igual con un punto encima indica una definición formal.
+  \item $\mathbb{E}[\,\cdot\,]$ (\textit{«esperanza matemática»}): Es el \textbf{promedio esperado} o valor medio a largo plazo.
+  \item $R_t \mid A_t = a$ (\textit{«$R_t$ dado que $A_t$ es igual a $a$»}): La barra vertical $\mid$ se lee \textbf{«dado que»} o «condicionado a». La expresión completa responde a: \textit{«Si elegimos la acción $a$, ¿cuál es la recompensa promedio que esperamos recibir?»}.
+\end{itemize}
+
+\subsection*{2. La estimación aprendida por el agente: $Q_t(a)$}
+En la práctica, el agente no conoce $q_*(a)$ de antemano. Por ello, mantiene en memoria una \textbf{estimación empírica} llamada $Q_t(a)$, construida a partir de las recompensas que ha recibido en el pasado.
+
+\noindent En palabras simples:
+\begin{equation*}
+  Q_t(a) = \frac{\text{Suma de recompensas obtenidas al elegir la acción } a}{\text{Número de veces que se ha elegido la acción } a}
+\end{equation*}
+
+\noindent De manera matemática formal, si la acción $a$ se ha seleccionado $N_t(a)$ veces antes del instante $t$, su estimación se calcula como:
 \begin{equation}
   Q_t(a) \doteq \frac{\sum_{i=1}^{t-1} R_i \cdot \mathbb{I}(A_i = a)}{N_t(a)}
 \end{equation}
 
-\section{La Regla de Actualización Incremental}
-Almacenar todas las recompensas históricas en un vector requeriría una memoria que crece indefinidamente con el tiempo. Afortunadamente, podemos actualizar el promedio de forma recursiva:
-\begin{align}
-  Q_{n+1} &= \frac{1}{n} \sum_{i=1}^n R_i \notag \\
-  &= \frac{1}{n} \left( R_n + \sum_{i=1}^{n-1} R_i \right) \notag \\
-  &= \frac{1}{n} \left( R_n + (n-1) Q_n \right) \notag \\
-  &= Q_n + \frac{1}{n} \left( R_n - Q_n \right)
-\end{align}
-
-\begin{ideaclave}
-La ecuación anterior representa el patrón estructural más importante de todo el Aprendizaje por Refuerzo:
-\begin{equation}
-  \text{NuevaEstimación} \leftarrow \text{EstimaciónPrevia} + \text{TamañoDePaso} \times \left[ \text{Objetivo} - \text{EstimaciónPrevia} \right]
-\end{equation}
-El término entre corchetes, $[\text{Objetivo} - \text{EstimaciónPrevia}]$, se denomina el \textbf{error de estimación}. Este mismo esquema gobierna la Diferencia Temporal, SARSA, Q-Learning y el entrenamiento de redes neuronales profundas.
-\end{ideaclave}
-
-Si el entorno no es estacionario (las probabilidades de los proveedores cambian con el tiempo), reemplazamos $\frac{1}{n}$ por una tasa constante $\alpha \in (0, 1]$, lo que confiere mayor peso exponencial a las observaciones más recientes.
-
-\section{El Dilema Exploración vs. Explotación: Métodos $\varepsilon$-Greedy}
+\noindent \textbf{¿Cómo se lee y qué representa cada parte de esta fórmula?}
 \begin{itemize}
-  \item \textbf{Explotación ($\text{greedy}$):} Seleccionar la acción con mayor valor estimado actual:
-  \begin{equation}
-    A_t^* = \arg\max_a Q_t(a)
-  \end{equation}
-  Aprovecha el conocimiento adquirido para obtener recompensas inmediatas elevadas, pero corre el riesgo de ignorar una acción superior aún no descubierta.
-  \item \textbf{Exploración:} Seleccionar deliberadamente una acción subóptima según los datos actuales para recopilar información y mejorar las estimaciones futuras.
+  \item $Q_t(a)$ (\textit{«Q en el tiempo $t$ de la acción $a$»}): Es la \textbf{estimación o creencia actual} que tiene el agente en su memoria sobre la calidad de la acción $a$, justo antes de jugar el turno $t$.
+  \item $N_t(a)$ (\textit{«N en el tiempo $t$ de a»}): Es un simple \textbf{contador} que indica cuántas veces se ha ejecutado la acción $a$ antes del paso $t$.
+  \item $\sum_{i=1}^{t-1}$ (\textit{«sumatoria desde el paso $i=1$ hasta $t-1$»}): Indica que se suman los resultados de todos los turnos previos al turno actual $t$.
+  \item $\mathbb{I}(A_i = a)$ (\textit{«función indicadora»}): Actúa como un \textbf{filtro o interruptor}: vale $1$ si en el paso $i$ se eligió la acción $a$, y vale $0$ si se eligió otra. De este modo, la suma solo acumula las recompensas que realmente corresponden a la acción $a$.
 \end{itemize}
 
-El algoritmo $\varepsilon$-greedy equilibra ambas necesidades de forma sencilla y elegante:
+\section{La Regla de Actualización Incremental}
+Almacenar la secuencia histórica completa de recompensas para cada acción demandaría un consumo de memoria linealmente creciente con el tiempo. Resulta más eficiente computacionalmente derivar una formulación recursiva que actualice la media empleando únicamente la estimación anterior y la nueva observación:
+\begin{align*}
+  Q_{n+1} &= \frac{1}{n} \sum_{i=1}^n R_i \\
+  &= \frac{1}{n} \left( R_n + \sum_{i=1}^{n-1} R_i \right) \\
+  &= \frac{1}{n} \left( R_n + (n-1) Q_n \right) \\
+  &= Q_n + \frac{1}{n} \left( R_n - Q_n \right)
+\end{align*}
+
+\begin{ideaclave}
+La ecuación resultante establece el patrón de actualización paradigmático de todo el Aprendizaje por Refuerzo:
+\begin{equation}
+  \mathbf{\text{NuevaEstimación} \leftarrow \text{EstimaciónPrevia} + \alpha \cdot \Big[ \text{Objetivo} - \text{EstimaciónPrevia} \Big]}
+\end{equation}
+La diferencia $[\text{Objetivo} - \text{EstimaciónPrevia}]$ constituye el \textbf{error de estimación} (o error de predicción), el cual cuantifica la sorpresa generada por el entorno. El parámetro $\alpha$ determina la tasa de aprendizaje o tamaño de paso.
+\end{ideaclave}
+
+En entornos no estacionarios (donde las recompensas de cada acción pueden cambiar con el tiempo), usar $\frac{1}{n}$ haría que el agente se vuelva rígido y deje de aprender a medida que $n$ crece. Por ello, se reemplaza $\frac{1}{n}$ por un tamaño de paso constante $\alpha \in (0, 1]$. De este modo, mientras más grande sea $\alpha$, mayor prioridad le dará a las experiencias recientes y «olvidará» más rápido el pasado lejano (\textit{decaimiento exponencial}), manteniéndose flexible ante cualquier cambio.
+
+
+\section{Estrategia de Decisión: El Algoritmo $\varepsilon$-Greedy}
+Si el agente siempre elige la acción que parece mejor en ese momento (\textit{estrategia codiciosa o greedy}, $\arg\max_a Q(a)$), corre el riesgo de quedarse atrapado en una opción mediocre solo porque las demás tuvieron mala suerte en sus primeros intentos.
+
+El algoritmo \textbf{$\varepsilon$-greedy} resuelve esto con una regla muy sencilla: la mayor parte del tiempo elige la mejor opción conocida (\textbf{explotación}), pero deja una pequeña probabilidad $\varepsilon$ (por ejemplo, el $10\%$ de las veces) para probar una acción al azar (\textbf{exploración}):
 \begin{equation}
   A_t = \begin{cases}
-    \text{acción aleatoria uniforme en } \mathcal{A}, & \text{con probabilidad } \varepsilon, \\
-    \arg\max_a Q_t(a), & \text{con probabilidad } 1 - \varepsilon.
+    \text{acción aleatoria (explorar)}, & \text{con probabilidad } \varepsilon, \\
+    \arg\max_{a \in \mathcal{A}} Q_t(a) \text{ (explotar la mejor)}, & \text{con probabilidad } 1 - \varepsilon.
   \end{cases}
 \end{equation}
 
 \begin{calculomanual}
-Supongamos que OptiBot tiene la tabla de valores $Q = [0.0, 0.0, 0.0, 0.0]$ y elige el Proveedor B ($a=2$).
+Veamos cómo actualiza OptiBot sus estimaciones en sus tres primeros despachos, partiendo de estimaciones en cero $Q = [0.0, 0.0, 0.0, 0.0]$ para los Proveedores A, B, C y D:
 \begin{enumerate}
-  \item Observa una recompensa $R_1 = 5.2$. Como $N(B)=1$:
+  \item \textbf{Paso 1 (Exploración):} Elige al azar al \textbf{Proveedor B} ($a=2$) y obtiene una recompensa $R_1 = +5.20$. Al ser su primer uso ($N(B)=1$):
   \[
-    Q_2(B) = 0.0 + \frac{1}{1}(5.2 - 0.0) = \mathbf{5.20}
+    Q_2(B) = 0.0 + \frac{1}{1}(5.20 - 0.0) = \mathbf{+5.20}
   \]
-  \item En el siguiente paso, elige de nuevo el Proveedor B y obtiene $R_2 = 4.4$. Ahora $N(B)=2$:
+  \item \textbf{Paso 2 (Explotación):} Como B tiene la estimación más alta ($5.20$), lo explota. Obtiene $R_2 = +4.40$. Al ser su segundo uso ($N(B)=2$):
   \[
-    Q_3(B) = 5.20 + \frac{1}{2}(4.4 - 5.20) = 5.20 - 0.40 = \mathbf{4.80}
+    Q_3(B) = 5.20 + \frac{1}{2}(4.40 - 5.20) = 5.20 - 0.40 = \mathbf{+4.80}
   \]
-  \item En el tercer paso explora el Proveedor A ($a=1$) y obtiene $R_3 = 3.0$. Ahora $N(A)=1$:
+  \item \textbf{Paso 3 (Exploración):} Decide explorar y prueba al \textbf{Proveedor A} ($a=1$). Obtiene $R_3 = +3.00$. Al ser su primer uso ($N(A)=1$):
   \[
-    Q_4(A) = 0.0 + \frac{1}{1}(3.0 - 0.0) = \mathbf{3.00}
+    Q_4(A) = 0.0 + \frac{1}{1}(3.00 - 0.0) = \mathbf{+3.00}
   \]
 \end{enumerate}
-La tabla actualizada es $Q = [3.00, 4.80, 0.00, 0.00]$. El agente explota correctamente a B con probabilidad $1-\varepsilon$, pero mantiene la capacidad de probar C y D.
+\noindent \textbf{Resultado:} La memoria del robot queda en $Q = [3.00, \, 4.80, \, 0.00, \, 0.00]$. OptiBot seguirá explotando preferentemente al Proveedor B (por tener el valor más alto, $4.80$), pero el mecanismo $\varepsilon$ le permitirá explorar oportunamente a C y D.
 \end{calculomanual}
 
 \section{Implementación en Python}
-A continuación implementamos el agente de bandidos multi-brazo completo en Python:
+A continuación se detalla la implementación completa del algoritmo de bandidos multi-brazo en Python:
 
 \begin{lstlisting}[style=rlcode]
 import numpy as np
-import matplotlib.pyplot as plt
 
-class BanditOptiBot:
-    def __init__(self, k=4, epsilon=0.1, alpha=None):
+class BandidoAlmacen:
+    def __init__(self, k=4, epsilon=0.10):
         self.k = k
         self.epsilon = epsilon
-        self.alpha = alpha
-        self.q_true = np.array([3.2, 4.8, 2.1, 4.1]) # Valores reales ocultos
-        self.Q = np.zeros(k)
-        self.N = np.zeros(k)
+        # Valores objetivos subyacentes del entorno
+        self.q_real = np.array([3.2, 4.8, 2.1, 4.1])
+        self.Q = np.zeros(k) # Vector de estimaciones iniciales
+        self.N = np.zeros(k) # Vector de frecuencias de seleccion
 
-    def select_action(self):
+    def seleccionar_accion(self):
+        # Seleccion epsilon-greedy
         if np.random.rand() < self.epsilon:
-            return np.random.randint(self.k)
-        return np.argmax(self.Q)
+            return np.random.randint(self.k) # Exploracion uniforme
+        return np.argmax(self.Q)              # Explotacion codiciosa
 
-    def step(self, action):
-        # Recompensa estocastica con ruido gaussiano
-        reward = np.random.normal(loc=self.q_true[action], scale=1.0)
-        self.N[action] += 1
-        step_size = self.alpha if self.alpha is not None else (1.0 / self.N[action])
-        self.Q[action] += step_size * (reward - self.Q[action])
-        return reward
+    def ejecutar_paso(self, accion):
+        # Simulacion de respuesta estocastica con ruido gaussiano
+        recompensa = np.random.normal(loc=self.q_real[accion], scale=1.0)
+        self.N[accion] += 1
+        # Actualizacion mediante la regla incremental
+        error = recompensa - self.Q[accion]
+        self.Q[accion] += (1.0 / self.N[accion]) * error
+        return recompensa
 
-# Simulacion de 2,000 despachos
-bot = BanditOptiBot(k=4, epsilon=0.10)
-rewards = []
+# Simulacion de 2,000 despachos en el almacen
+robot = BandidoAlmacen(k=4, epsilon=0.10)
 for t in range(2000):
-    a = bot.select_action()
-    r = bot.step(a)
-    rewards.append(r)
+    a = robot.seleccionar_accion()
+    r = robot.ejecutar_paso(a)
 
-print("Estimaciones finales Q:", np.round(bot.Q, 3))
-print("Veces seleccionado cada proveedor:", bot.N)
+print("Valores Reales Subyacentes:", robot.q_real)
+print("Estimaciones Aprendidas:   ", np.round(robot.Q, 2))
+print("Frecuencia de Seleccion:   ", robot.N)
 \end{lstlisting}
 
 \begin{notabox}
-\textbf{La limitación que motiva el siguiente capítulo:} En el problema de los bandidos, el agente toma decisiones, pero \textbf{el mundo nunca cambia de estado}. Todas las decisiones ocurren en el mismo vacío estático. En la vida real, los sistemas evolucionan: los equipos se desgastan y el entorno transita por diferentes estados físicos. Ese fenómeno dinámico es el objeto de estudio de las \textbf{Cadenas de Markov}.
+El modelo de bandidos multi-brazo permite formalizar con rigor el dilema entre exploración y explotación. No obstante, presenta una limitación estructural clave: \textbf{las acciones del agente no alteran el estado del entorno}. 
+
+En el mundo real, los entornos no son estáticos: evolucionan y cambian de estado con el tiempo (por ejemplo, una máquina que se desgasta o la batería que se agota). Antes de aprender a tomar decisiones en ellos, en el Capítulo~\ref{cap:markov} se estudiará cómo modelar estos cambios mediante las \textbf{Cadenas de Markov}.
 \end{notabox}

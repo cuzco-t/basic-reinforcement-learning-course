@@ -1,112 +1,465 @@
 \chapter{Cadenas de Markov y Procesos Estocásticos}
 \label{cap:markov}
 
-\section{Introducción a la Dinámica Temporal}
-En el capítulo anterior comprobamos que OptiBot podía aprender a seleccionar el mejor proveedor de mensajería mediante la regla de actualización incremental. No obstante, el entorno era completamente estático: cada decisión se tomaba en el mismo instante abstracto y no afectaba a los intentos venideros.
+\section{De las Decisiones Aisladas a los Mundos en Movimiento}
+En el Capítulo~\ref{cap:bandidos} vimos cómo un agente aprende a elegir la mejor opción mediante ensayo y error (el problema de los bandidos). Sin embargo, en ese escenario asumíamos una simplificación muy grande: cada intento comenzaba desde cero, como si lanzáramos una moneda al aire una y otra vez. Elegir una máquina tragamonedas o un proveedor de envíos no cambiaba la hora del día, no desgastaba los motores del robot ni modificaba el lugar donde estaba parado.
 
-En el mundo físico, los entornos poseen memoria física y estados cambiantes: la batería se descarga, las ruedas pierden adherencia y las cintas transportadoras sufren desgaste mecánico. Para modelar matemáticamente cómo un sistema físico evoluciona en el tiempo bajo la influencia del azar, recurrimos a las \textbf{Cadenas de Markov}.
+En el mundo real, los entornos tienen \textbf{memoria física, inercia y desgaste}:
+\begin{itemize}
+  \item Si un robot tiene la batería al $95\%$, puede realizar rutas largas con tranquilidad; pero si su batería cae al $5\%$, su prioridad urgente debe ser buscar un cargador.
+  \item Si el suelo del almacén se moja con aceite, los neumáticos resbalarán con mayor facilidad en los siguientes giros.
+  \item Una máquina industrial no se rompe por sorpresa de un segundo a otro: primero se calienta, luego vibra, sus rodamientos se desgastan y, finalmente, se descompone si nadie interviene.
+\end{itemize}
 
-\section{La Propiedad de Markov}
-Consideremos una secuencia temporal de estados discretos $S_0, S_1, S_2, \dots, S_t, S_{t+1}$. Decimos que un proceso estocástico satisface la \textbf{Propiedad de Markov} si la distribución de probabilidad del estado futuro depende exclusivamente del estado presente, siendo condicionalmente independiente de toda la historia pasada:
+A cada una de estas situaciones o condiciones en las que puede encontrarse un sistema en un instante determinado se le llama \textbf{estado}. Antes de enseñarle a un robot a tomar decisiones inteligentes para cambiar su entorno, necesitamos entender las reglas matemáticas que describen cómo evoluciona ese entorno por sí mismo a lo largo del tiempo. A este modelo se le conoce como una \textbf{Cadena de Markov}.
+
+\begin{optibot}
+En el almacén de distribución donde opera nuestro robot \textbf{OptiBot}, la pieza central de la logística es una gran cinta transportadora encargada de mover cajas pesadas. Los rodillos mecánicos de esta cinta giran sin parar durante turnos enteros. Con el paso de las horas, los rodamientos de los rodillos sufren desgaste continuo. 
+
+OptiBot necesita aprender a predecir cuándo fallará la maquinaria para evitar que la operación se detenga. ¿Cómo podemos modelar el envejecimiento de esa máquina paso a paso?
+\end{optibot}
+
+\section{La Propiedad de Markov: El Presente es lo Único que Importa}
+Imagine que va conduciendo un automóvil por la autopista a $80\text{ km/h}$ y desea predecir en qué punto de la carretera estará dentro de exactamente un segundo. ¿Necesita revisar en su memoria qué desayunó por la mañana o por cuántas ciudades pasó hace tres días? Por supuesto que no. Para saber dónde estará en el siguiente segundo, solo necesita conocer dos datos del \textbf{instante presente}: su posición y su velocidad actuales.
+
+Esta intuición tan natural es el corazón de la \textbf{Propiedad de Markov}:
+\begin{quote}
+  \textit{«El futuro depende únicamente del estado presente, y no de toda la historia pasada que condujo a él.»}
+\end{quote}
+
+\noindent De manera matemática formal, si llamamos $S_t$ al estado actual en el tiempo $t$, la probabilidad de llegar al estado futuro $S_{t+1}$ se escribe:
 \begin{equation}
   P\left( S_{t+1} = s_{t+1} \;\middle|\; S_t = s_t, \, S_{t-1} = s_{t-1}, \, \dots, \, S_0 = s_0 \right) = P\left( S_{t+1} = s_{t+1} \;\middle|\; S_t = s_t \right)
 \end{equation}
 
+\noindent \textbf{¿Cómo se lee y qué significa cada símbolo de esta ecuación?}
+\begin{itemize}
+  \item $S_{t+1} = s_{t+1}$ (\textit{«el estado en el turno $t+1$»}): Es el \textbf{futuro inmediato} (¿dónde estará el sistema en el siguiente paso?).
+  \item $S_t = s_t$ (\textit{«el estado en el turno $t$»}): Es el \textbf{presente} (¿dónde está el sistema justo ahora?).
+  \item $S_{t-1}, \dots, S_0$ (\textit{«los estados previos hasta el inicio»}): Representa toda la \textbf{historia pasada} del sistema.
+  \item La barra vertical $\mid$ (\textit{«dado que»}): Indica que ya conocemos esa información previa.
+  \item El signo de igualdad ($=$): Es la clave de todo. Afirma que conocer el historial pasado completo \textbf{no agrega ninguna información nueva ni cambia las probabilidades} si ya conocemos con exactitud el estado presente.
+\end{itemize}
+
 \begin{ideaclave}
-La propiedad de Markov no afirma que el pasado carezca de importancia. Lo que establece es que \textbf{toda la información relevante del pasado ya se encuentra encapsulada en el estado presente}. Si conoces con exactitud dónde estás hoy, saber cómo llegaste allí no añade ningún poder predictivo sobre a dónde irás mañana.
+Un sistema markoviano no necesita guardar un registro infinito de todo lo que ocurrió en el pasado. Toda la información acumulada que resulta relevante para predecir el futuro ya se encuentra resumida y concentrada dentro del \textbf{estado presente}. En términos técnicos se dice que el estado presente es una \textit{estadística suficiente} del proceso.
 \end{ideaclave}
 
-\begin{optibot}
-OptiBot supervisa los rodamientos de la cinta transportadora central. En cada turno de trabajo, el estado del rodamiento se clasifica en una de tres categorías discretas $\mathcal{S} = \{ \text{Nuevo } (N), \text{Desgastado } (D), \text{Averiado } (A) \}$.
-\begin{itemize}
-  \item Si un rodamiento está Nuevo, tiene una probabilidad de $0.70$ de seguir Nuevo en el próximo turno, $0.20$ de pasar a Desgastado y $0.10$ de sufrir una rotura imprevista (Averiado).
-  \item Si está Desgastado, tiene probabilidad $0.60$ de seguir Desgastado, $0.30$ de romperse (Averiado) y $0.10$ de que un operario le aplique lubricante y vuelva a considerarse Nuevo.
-  \item Si está Averiado, la cinta se detiene hasta que el equipo de mantenimiento lo repara; permanece averiado con probabilidad $0.90$ y es sustituido por uno Nuevo con probabilidad $0.10$.
-\end{itemize}
-\end{optibot}
+\subsection*{Ejemplo: El sistema de rodamientos en la cinta transportadora de OptiBot}
+Para aterrizar esta idea en un caso práctico, observemos los rodamientos de la cinta transportadora de OptiBot. Al final de cada turno de trabajo, el estado de salud de un rodamiento se clasifica en una de tres categorías dentro del conjunto de estados:
+\begin{equation*}
+  \mathcal{S} = \{ \text{Nuevo } (N), \, \text{Desgastado } (D), \, \text{Averiado } (A) \}
+\end{equation*}
 
-\section{La Matriz de Transición de Estados}
-Para un conjunto finito de estados $\mathcal{S} = \{s_1, s_2, \dots, s_n\}$, organizamos todas las probabilidades de transición condicionales en una matriz cuadrada $P \in \mathbb{R}^{n \times n}$, donde cada elemento representa:
+\begin{enumerate}
+  \item \textbf{Estado Nuevo ($N$):} La pieza está recién instalada y funciona con suavidad.
+  \begin{itemize}
+    \item Tiene un $70\%$ de probabilidad de mantenerse en buen estado al terminar el turno ($N \to N$).
+    \item Tiene un $20\%$ de probabilidad de comenzar a mostrar fatiga y pasar a desgastado ($N \to D$).
+    \item Tiene un $10\%$ de probabilidad de sufrir una fractura súbita y romperse directamente ($N \to A$).
+  \end{itemize}
+
+  \item \textbf{Estado Desgastado ($D$):} La pieza rechina y vibra, pero aún permite mover la cinta.
+  \begin{itemize}
+    \item Tiene un $60\%$ de probabilidad de seguir desgastada un turno más ($D \to D$).
+    \item Tiene un $30\%$ de probabilidad de fallar por completo y romperse ($D \to A$).
+    \item Tiene un $10\%$ de probabilidad de que un técnico aplique lubricante y la devuelva al estado nuevo ($D \to N$).
+  \end{itemize}
+
+  \item \textbf{Estado Averiado ($A$):} El rodamiento se trabó y la cinta transportadora está paralizada.
+  \begin{itemize}
+    \item Tiene un $90\%$ de probabilidad de continuar averiado debido a demoras en la llegada del repuesto ($A \to A$).
+    \item Tiene un $10\%$ de probabilidad de ser reemplazado por un repuesto nuevo durante el turno ($A \to N$).
+    \item No transita directamente a desgastado ($0\%$), pues una pieza rota solo vuelve a operar cuando se sustituye por una totalmente nueva.
+  \end{itemize}
+\end{enumerate}
+
+Este comportamiento estocástico se visualiza de forma intuitiva como un mapa de carreteras en el \textbf{grafo de transición de estados} de la Figura~\ref{fig:markov_chain_graph}. Cada círculo representa un estado y cada flecha indica la probabilidad de saltar de un estado a otro en el siguiente turno.
+
+\begin{figure}[!htb]
+\centering
+\begin{tikzpicture}[
+  >=Stealth,
+  every node/.style={font=\sffamily},
+  stateN/.style={circle, draw=Leaf, fill=Leaf!12, very thick, minimum size=1.75cm, align=center, font=\small\bfseries\sffamily, text=Leaf!90!black},
+  stateD/.style={circle, draw=Gold, fill=Gold!15, very thick, minimum size=1.75cm, align=center, font=\small\bfseries\sffamily, text=Gold!95!black},
+  stateA/.style={circle, draw=Coral, fill=Coral!12, very thick, minimum size=1.75cm, align=center, font=\small\bfseries\sffamily, text=Coral!90!black},
+  trans/.style={->, thick, color=TealDark, >=Stealth},
+  lbl/.style={fill=white, inner sep=2pt, rounded corners=2pt, font=\footnotesize\sffamily\bfseries, text=Ink}
+]
+  % Nodos de estado
+  \node[stateN] (N) at (0, 0) {Nuevo\\($N$)};
+  \node[stateD] (D) at (4.2, 3.2) {Desgastado\\($D$)};
+  \node[stateA] (A) at (8.4, 0) {Averiado\\($A$)};
+
+  % Bucles de autorrecurrencia (permanecer en el mismo estado)
+  \draw[trans] (N) to [out=140, in=200, looseness=4.5] node[left=2pt, lbl] {$0.70$} (N);
+  \draw[trans] (D) to [out=60, in=120, looseness=4.5] node[above=2pt, lbl] {$0.60$} (D);
+  \draw[trans] (A) to [out=-20, in=40, looseness=4.5] node[right=2pt, lbl] {$0.90$} (A);
+
+  % Transiciones entre Nuevo y Desgastado
+  \draw[trans] (N) to [bend left=22] node[above left, lbl] {$0.20$} (D);
+  \draw[trans] (D) to [bend left=22] node[below right, lbl] {$0.10$} (N);
+
+  % Transicion Desgastado -> Averiado
+  \draw[trans] (D) to [bend left=22] node[above right, lbl] {$0.30$} (A);
+
+  % Transiciones entre Nuevo y Averiado
+  \draw[trans] (N) to [bend right=18] node[above, lbl] {$0.10$} (A);
+  \draw[trans] (A) to [bend left=38] node[below, lbl] {$0.10$} (N);
+\end{tikzpicture}
+\caption{Grafo de transición de estados para el rodamiento de la cinta transportadora en el almacén de OptiBot. Las flechas representan los saltos posibles entre turnos y los números indican sus probabilidades ($P_{ij}$).}
+\label{fig:markov_chain_graph}
+\end{figure}
+
+\section{La Matriz de Transición: El Mapa de Rutas en una Tabla}
+Dibujar un grafo es excelente para entender la idea general, pero para hacer cálculos rápidos en una computadora resulta mucho más práctico organizar todas las probabilidades en una tabla numérica: la \textbf{Matriz de Transición de Estados} $P$.
+
+Para un sistema con $n$ estados posibles $\mathcal{S} = \{s_1, s_2, \dots, s_n\}$, cada celda $P_{ij}$ (fila $i$, columna $j$) se define como:
 \begin{equation}
   P_{ij} \doteq P(S_{t+1} = s_j \mid S_t = s_i)
 \end{equation}
-Dado que partiendo de cualquier estado $s_i$ el sistema debe transitar obligatoriamente a algún estado del espacio muestral, cada fila de $P$ satisface la condición estocástica:
-\begin{equation}
-  \sum_{j=1}^n P_{ij} = 1 \quad \forall i \in \{1, \dots, n\}
-\end{equation}
-
-Para el caso de la cinta transportadora de OptiBot, la matriz de transición es:
+Reuniendo todas las probabilidades condicionales en una sola estructura, obtenemos la matriz general de transición $P$ de tamaño $n \times n$:
 \begin{equation}
   P = \begin{pmatrix}
+    P_{11} & P_{12} & \dots & P_{1n} \\
+    P_{21} & P_{22} & \dots & P_{2n} \\
+    \vdots & \vdots & \ddots & \vdots \\
+    P_{n1} & P_{n2} & \dots & P_{nn}
+  \end{pmatrix}
+\end{equation}
+
+\noindent \textbf{¿Cómo entender y leer esta matriz sin confundirse jamás?}
+\begin{itemize}
+  \item \textbf{La Fila $i$ representa el Origen:} ¿En qué estado se encuentra la máquina \textbf{hoy} ($S_t = s_i$)?
+  \item \textbf{La Columna $j$ representa el Destino:} ¿A qué estado pasará la máquina \textbf{mañana} ($S_{t+1} = s_j$)?
+  \item \textbf{Regla mnemotécnica de oro:} \textit{«Fila = ¿Dónde estoy? $\to$ Columna = ¿A dónde voy?»}. Cada celda $P_{ij}$ responde directamente a: \textit{«Estando en el estado $i$, ¿cuál es la probabilidad de brincar al estado $j$?»}.
+\end{itemize}
+
+\subsection*{Propiedad Obligatoria: Cada Fila Debe Sumar Exactamente 1.0 (100\%)}
+Piénselo por un momento: si la máquina está hoy en el estado $i$, al siguiente turno obligatoriamente tiene que terminar en alguno de los $n$ estados posibles (la máquina no puede evaporarse ni desaparecer en la nada). Por lo tanto, si sumamos todas las probabilidades al salir de cualquier fila $i$, la suma total debe ser siempre igual a $1.0$:
+\begin{equation}
+  \sum_{j=1}^n P_{ij} = 1 \quad \text{para toda fila } i
+\end{equation}
+A cualquier matriz con números positivos o cero donde cada fila sume exactamente $1.0$ se le llama en matemáticas una \textbf{matriz estocástica} (o matriz de probabilidades).
+
+\subsection*{Ejemplo: Construcción de la matriz de transición de OptiBot}
+Ordenando los tres estados como $(\text{Nuevo}, \, \text{Desgastado}, \, \text{Averiado})$, la matriz $P$ queda organizada de la siguiente forma:
+
+\begin{equation}
+  P = 
+  \begin{pmatrix}
     0.70 & 0.20 & 0.10 \\
     0.10 & 0.60 & 0.30 \\
     0.10 & 0.00 & 0.90
   \end{pmatrix}
+  \quad
+  \begin{array}{l}
+    \leftarrow \text{\small Fila 1 ($N$): } 0.70 + 0.20 + 0.10 = \mathbf{1.0} \\
+    \leftarrow \text{\small Fila 2 ($D$): } 0.10 + 0.60 + 0.30 = \mathbf{1.0} \\
+    \leftarrow \text{\small Fila 3 ($A$): } 0.10 + 0.00 + 0.90 = \mathbf{1.0}
+  \end{array}
 \end{equation}
 
-\section{Transiciones a Múltiples Pasos y Distribución Estacionaria}
-Si denotamos la distribución de probabilidad inicial del sistema como un vector fila $\mu_0 = [P(S_0=s_1), \dots, P(S_0=s_n)]$, la distribución en el paso 1 viene dada por el producto vectorial-matricial:
+\noindent \textbf{Ejemplos de lectura directa en la matriz:}
+\begin{itemize}
+  \item $P_{12} = 0.20$ (Fila 1, Columna 2): Estando en \textbf{Nuevo}, hay un $20\%$ de probabilidad de pasar a \textbf{Desgastado}.
+  \item $P_{23} = 0.30$ (Fila 2, Columna 3): Estando en \textbf{Desgastado}, hay un $30\%$ de probabilidad de terminar \textbf{Averiado}.
+  \item $P_{32} = 0.00$ (Fila 3, Columna 2): Estando en \textbf{Averiado}, hay un $0\%$ de probabilidad de pasar a desgastado sin antes haber sido reparado a nuevo.
+\end{itemize}
+
+\section{Predicción Temporal: Viajando al Futuro Paso a Paso}
+Una vez que tenemos la matriz de transición $P$, podemos predecir con exactitud matemática el futuro del sistema a cualquier número de turnos.
+
+\subsection*{El Vector de Estado Inicial (\texorpdfstring{$\mu_0$}{mu0})}
+Para saber a dónde iremos, primero debemos saber de dónde partimos en el instante inicial ($t=0$). Esto se escribe en un vector fila de probabilidades llamado $\mu_0$ (\textit{«mu sub-cero»}):
+\begin{equation}
+  \mu_0 = \big[ P(S_0 = N), \, P(S_0 = D), \, P(S_0 = A) \big]
+\end{equation}
+
+\begin{itemize}
+  \item \textbf{Certeza de pieza nueva:} Si acabamos de instalar un rodamiento nuevo de paquete, sabemos al $100\%$ que está en $N$:
+  \[
+    \mu_0 = [1.0, \, 0.0, \, 0.0]
+  \]
+  \item \textbf{Incertidumbre de inicio:} Si compramos un lote usado donde hay $50\%$ de probabilidad de que esté nuevo y $50\%$ de que esté desgastado, escribiríamos:
+  \[
+    \mu_0 = [0.50, \, 0.50, \, 0.00]
+  \]
+\end{itemize}
+
+\subsection*{La Regla de Proyección: Ecuaciones de Chapman-Kolmogorov}
+¿Cómo calculamos la distribución de probabilidades para el siguiente turno ($t=1$)? Basta con multiplicar el vector inicial por la matriz de transición:
 \begin{equation}
   \mu_1 = \mu_0 P
 \end{equation}
-Por inducción y por las ecuaciones de Chapman-Kolmogorov, la distribución en el paso $k$ es:
+¿Y para el segundo turno ($t=2$)? Multiplicamos el resultado anterior nuevamente por la matriz:
 \begin{equation}
-  \mu_k = \mu_0 P^k
+  \mu_2 = \mu_1 P = (\mu_0 P) P = \mu_0 P^2
 \end{equation}
 
-Cuando la cadena de Markov es irreducible y aperiódica, existe una única \textbf{distribución estacionaria} $\pi^* = [\pi_1^*, \dots, \pi_n^*]$ que es invariante bajo la aplicación de la matriz de transición:
+Siguiendo esta regla para cualquier turno futuro $k$ (llamada en la literatura matemática las \textbf{ecuaciones de Chapman-Kolmogorov}):
 \begin{equation}
-  \pi^* P = \pi^* \quad \text{sujeto a} \quad \sum_{i=1}^n \pi_i^* = 1
+  \mathbf{\mu_k = \mu_0 P^k}
 \end{equation}
+\textbf{¡Esta fórmula es sumamente poderosa!} Significa que para conocer el estado de la máquina dentro de 100 turnos, no tenemos que simular paso a paso cada minuto; basta con elevar la matriz a la potencia 100 ($P^{100}$) y multiplicarla por el estado de partida.
 
-\begin{calculomanual}
-Supongamos que hoy instalamos un rodamiento totalmente nuevo, por lo que el vector de estado inicial es $\mu_0 = [1.0, 0.0, 0.0]$. ¿Cuál es la probabilidad exacta de que el rodamiento esté averiado dentro de 2 turnos?
+\subsection*{Ejemplo: Cálculo manual de la evolución a corto plazo ($t=1$ y $t=2$)}
+Supongamos que OptiBot instala un rodamiento nuevo en $t=0$, es decir, $\mu_0 = [1.0, \, 0.0, \, 0.0]$. Vamos a calcular a mano qué ocurrirá en los turnos $t=1$ y $t=2$.
+
+\paragraph{Paso 1: ¿Qué pasa tras el primer turno ($t=1$)?}
+Multiplicamos el vector $\mu_0$ por la matriz $P$:
 \begin{align*}
-  \mu_1 &= \mu_0 P = [0.70, 0.20, 0.10] \\
-  \mu_2 &= \mu_1 P = [0.70, 0.20, 0.10] \begin{pmatrix}
+  \mu_1 = \mu_0 P &= [1.0, \, 0.0, \, 0.0] \begin{pmatrix}
+    0.70 & 0.20 & 0.10 \\
+    0.10 & 0.60 & 0.30 \\
+    0.10 & 0.00 & 0.90
+  \end{pmatrix} \\
+  &= [ (1.0 \times 0.70), \, (1.0 \times 0.20), \, (1.0 \times 0.10) ] \\
+  &= \mathbf{[0.70, \, 0.20, \, 0.10]}
+\end{align*}
+Al finalizar el primer turno, hay un $70\%$ de probabilidad de que la pieza siga nueva, un $20\%$ de que esté desgastada y un $10\%$ de que haya sufrido una avería temprana.
+
+\paragraph{Paso 2: ¿Qué pasa tras el segundo turno ($t=2$)?}
+Tomamos $\mu_1 = [0.70, \, 0.20, \, 0.10]$ y lo multiplicamos nuevamente por la matriz $P$:
+\begin{equation*}
+  \mu_2 = \mu_1 P = [0.70, \, 0.20, \, 0.10] \begin{pmatrix}
     0.70 & 0.20 & 0.10 \\
     0.10 & 0.60 & 0.30 \\
     0.10 & 0.00 & 0.90
   \end{pmatrix}
-\end{align*}
-Calculamos la tercera componente de $\mu_2$, correspondiente al estado Averiado ($A$):
+\end{equation*}
+
+Calculamos cada estado final sumando las probabilidades de todos los caminos posibles (Ley de Probabilidad Total):
+\begin{itemize}
+  \item \textbf{Estar Nuevo en $t=2$ ($N$):}
+  \begin{align*}
+    P(S_2 = N) &= (0.70 \times 0.70) + (0.20 \times 0.10) + (0.10 \times 0.10) \\
+    &= 0.49 + 0.02 + 0.01 = \mathbf{0.52} \quad (52\%)
+  \end{align*}
+  \item \textbf{Estar Desgastado en $t=2$ ($D$):}
+  \begin{align*}
+    P(S_2 = D) &= (0.70 \times 0.20) + (0.20 \times 0.60) + (0.10 \times 0.00) \\
+    &= 0.14 + 0.12 + 0.00 = \mathbf{0.26} \quad (26\%)
+  \end{align*}
+  \item \textbf{Estar Averiado en $t=2$ ($A$):}
+  \begin{align*}
+    P(S_2 = A) &= (0.70 \times 0.10) + (0.20 \times 0.30) + (0.10 \times 0.90) \\
+    &= 0.07 + 0.06 + 0.09 = \mathbf{0.22} \quad (22\%)
+  \end{align*}
+\end{itemize}
+
+El vector resultante es $\mu_2 = [0.52, \, 0.26, \, 0.22]$ (cuya suma es $0.52 + 0.26 + 0.22 = 1.0$).
+
+\paragraph{Enfoque alternativo directo: Cálculo con $\mu_2 = \mu_0 P^2$}
+En lugar de propagar el sistema paso a paso ($\mu_1 = \mu_0 P$ y luego $\mu_2 = \mu_1 P$), podemos calcular directamente la matriz de transición a 2 pasos elevando la matriz al cuadrado ($P^2 = P \times P$):
 \begin{align*}
-  P(S_2 = A) &= (0.70)(0.10) + (0.20)(0.30) + (0.10)(0.90) \\
-  &= 0.07 + 0.06 + 0.09 = \mathbf{0.22}
+  P^2 = P \times P &= \begin{pmatrix}
+    0.70 & 0.20 & 0.10 \\
+    0.10 & 0.60 & 0.30 \\
+    0.10 & 0.00 & 0.90
+  \end{pmatrix}
+  \begin{pmatrix}
+    0.70 & 0.20 & 0.10 \\
+    0.10 & 0.60 & 0.30 \\
+    0.10 & 0.00 & 0.90
+  \end{pmatrix} \\
+  &= \begin{pmatrix}
+    0.52 & 0.26 & 0.22 \\
+    0.16 & 0.38 & 0.46 \\
+    0.16 & 0.02 & 0.82
+  \end{pmatrix}
 \end{align*}
-Existe un $22\%$ de probabilidad de que la cinta esté averiada en el segundo turno.
-\end{calculomanual}
+
+Multiplicando ahora el vector inicial $\mu_0$ directamente por $P^2$:
+\begin{align*}
+  \mu_2 = \mu_0 P^2 &= [1.0, \, 0.0, \, 0.0] \begin{pmatrix}
+    0.52 & 0.26 & 0.22 \\
+    0.16 & 0.38 & 0.46 \\
+    0.16 & 0.02 & 0.82
+  \end{pmatrix} \\
+  &= [ (1.0 \times 0.52), \, (1.0 \times 0.26), \, (1.0 \times 0.22) ] \\
+  &= \mathbf{[0.52, \, 0.26, \, 0.22]}
+\end{align*}
+
+Como se comprueba, \textbf{ambos caminos son matemáticamente equivalentes y conducen al mismo resultado exacto}:
+\begin{itemize}
+  \item \textbf{Cálculo paso a paso:} $\mu_2 = \mu_1 P = [0.52, \, 0.26, \, 0.22]$.
+  \item \textbf{Cálculo directo por potencia:} $\mu_2 = \mu_0 P^2 = [0.52, \, 0.26, \, 0.22]$.
+\end{itemize}
+
+\textbf{Conclusión didáctica:} En tan solo dos turnos, la probabilidad de conservar la pieza en óptimas condiciones se desplomó prácticamente a la mitad ($52\%$), y el riesgo de que la cinta transportadora esté fuera de servicio ya ascendió al $22\%$.
+
+\section{Distribución Estacionaria: Multiplicando la Matriz Hasta el Infinito}
+Ahora viene la pregunta más importante para la ingeniería y la toma de decisiones: ¿qué pasará si la fábrica trabaja durante semanas, meses o años ($k \to \infty$)? ¿Las probabilidades seguirán cambiando para siempre o llegarán a un punto de equilibrio estable?
+
+\subsection{El Gran Descubrimiento: Multiplicar la Matriz por Sí Misma (\texorpdfstring{$P^k$}{Pk})}
+Para responder esto, hagamos un experimento muy revelador: tomemos la matriz de transición $P$ y multipliquémosla por sí misma una y otra vez ($P \times P \times P \dots = P^k$).
+
+Recordemos qué significa cada celda $(i, j)$ de la matriz elevada a la potencia $k$:
+\begin{equation}
+  \left(P^k\right)_{ij} = \text{Probabilidad de llegar al estado } j \text{ tras } k \text{ turnos, habiendo salido del estado } i.
+\end{equation}
+
+\subsection*{Ejemplo: Multiplicación sucesiva de la matriz de OptiBot}
+Retomando la matriz de transición a dos pasos $P^2$ calculada anteriormente:
+\begin{equation*}
+  P^2 = 
+  \begin{pmatrix}
+    0.520 & 0.260 & 0.220 \\
+    0.160 & 0.380 & 0.460 \\
+    0.160 & 0.020 & 0.820
+  \end{pmatrix}
+\end{equation*}
+
+Observemos que en $t=2$ las tres filas todavía son muy distintas entre sí. ¿Por qué? Porque el sistema todavía recuerda de dónde vino: si empezó averiado, la probabilidad de seguir roto sigue siendo muy alta ($82\%$).
+
+\paragraph{Multiplicaciones sucesivas ($P^3, P^5, P^{10}, P^{20}, P^{50}$)}
+¿Qué sucede si seguimos multiplicando la matriz por sí misma sucesivamente en la computadora?
+\begin{align*}
+  P^3 &= P^2 \cdot P = 
+  \begin{pmatrix}
+    0.4120 & 0.2600 & 0.3280 \\
+    0.1960 & 0.2600 & 0.5440 \\
+    0.1960 & 0.0440 & 0.7600
+  \end{pmatrix} \\[0.8ex]
+  P^5 &= P^3 \cdot P^2 = 
+  \begin{pmatrix}
+    0.3083 & 0.2125 & 0.4792 \\
+    0.2306 & 0.1606 & 0.6088 \\
+    0.2306 & 0.0829 & 0.6866
+  \end{pmatrix} \\[0.8ex]
+  P^{10} &= P^5 \cdot P^5 = 
+  \begin{pmatrix}
+    0.2545 & 0.1394 & 0.6061 \\
+    0.2485 & 0.1253 & 0.6263 \\
+    0.2485 & 0.1192 & 0.6323
+  \end{pmatrix} \\[0.8ex]
+  P^{20} &= P^{10} \cdot P^{10} = 
+  \begin{pmatrix}
+    0.2500 & 0.1252 & 0.6248 \\
+    0.2500 & 0.1250 & 0.6250 \\
+    0.2500 & 0.1249 & 0.6251
+  \end{pmatrix} \\[0.8ex]
+  P^{50} &\approx 
+  \begin{pmatrix}
+    \mathbf{0.2500} & \mathbf{0.1250} & \mathbf{0.6250} \\
+    \mathbf{0.2500} & \mathbf{0.1250} & \mathbf{0.6250} \\
+    \mathbf{0.2500} & \mathbf{0.1250} & \mathbf{0.6250}
+  \end{pmatrix}
+\end{align*}
+
+\subsection*{El Momento «¡Eureka!»: ¿Qué Significa este Resultado?}
+Mire con detenimiento la matriz $P^{50}$. ¡Las tres filas se han vuelto \textbf{exactamente idénticas}! Esto revela dos propiedades matemáticas y prácticas asombrosas:
+
+\begin{enumerate}
+  \item \textbf{Pérdida absoluta de la memoria de inicio:} 
+  A largo plazo, \textbf{no importa en absoluto cómo comenzó la máquina}. Ya sea que haya empezado nueva de fábrica ($\mu_0 = [1, 0, 0]$), desgastada ($\mu_0 = [0, 1, 0]$) o completamente rota ($\mu_0 = [0, 0, 1]$), después de 50 turnos la probabilidad de encontrarla en cada estado converge exactamente a los mismos porcentajes:
+  \begin{itemize}
+    \item Si partimos de pieza nueva ($\mu_0 = [1, 0, 0]$):
+    \[
+      \mu_{50} = [1, 0, 0] P^{50} \approx [0.250, \, 0.125, \, 0.625]
+    \]
+    \item Si partimos de pieza rota ($\mu_0 = [0, 0, 1]$):
+    \[
+      \mu_{50} = [0, 0, 1] P^{50} \approx [0.250, \, 0.125, \, 0.625]
+    \]
+    \item Si partimos de cualquier mezcla arbitraria $\mu_0 = [p_N, p_D, p_A]$ (con $p_N + p_D + p_A = 1$):
+    \begin{equation*}
+      \mu_\infty = [p_N, p_D, p_A] 
+      \begin{pmatrix}
+        0.250 & 0.125 & 0.625 \\
+        0.250 & 0.125 & 0.625 \\
+        0.250 & 0.125 & 0.625
+      \end{pmatrix}
+      = \mathbf{[0.250, \, 0.125, \, 0.625]}
+    \end{equation*}
+  \end{itemize}
+
+  \item \textbf{La Distribución Estacionaria ($\pi^*$):}
+  Esa fila única a la que converge la matriz es el vector de \textbf{distribución estacionaria} $\pi^* = [\pi_N^*, \pi_D^*, \pi_A^*]$:
+  \begin{equation*}
+    \pi^* = [0.250, \, 0.125, \, 0.625]
+  \end{equation*}
+  Esto significa que, en el largo plazo:
+  \begin{itemize}
+    \item $\pi_N^* = \mathbf{25.0\%}$ del tiempo total estará en estado \textbf{Nuevo}.
+    \item $\pi_D^* = \mathbf{12.5\%}$ del tiempo total estará en estado \textbf{Desgastado}.
+    \item $\pi_A^* = \mathbf{62.5\%}$ del tiempo total estará en estado \textbf{Averiado}.
+  \end{itemize}
+\end{enumerate}
+
+\subsection*{La Condición de Equilibrio: $\pi^* P = \pi^*$}
+Una vez que el sistema se encuentra en la distribución estacionaria, multiplicar nuevamente por la matriz $P$ ya no cambia nada: el sistema ha alcanzado un balance perfecto entre lo que entra y lo que sale de cada estado:
+\begin{equation}
+  \mathbf{\pi^* P = \pi^*} \quad \text{sujeto a} \quad \sum_{i=1}^n \pi_i^* = 1
+\end{equation}
+
+\noindent \textbf{Verificación algebraica manual de la igualdad:}
+Comprobemos que nuestro vector $\pi^* = [0.250, \, 0.125, \, 0.625]$ satisface exactamente la fórmula:
+\begin{align*}
+  \text{Para } N: \quad &0.70(0.250) + 0.10(0.125) + 0.10(0.625) = 0.175 + 0.0125 + 0.0625 = \mathbf{0.250} \quad \checkmark \\[0.4ex]
+  \text{Para } D: \quad &0.20(0.250) + 0.60(0.125) + 0.00(0.625) = 0.050 + 0.075 + 0.000 = \mathbf{0.125} \quad \checkmark \\[0.4ex]
+  \text{Para } A: \quad &0.10(0.250) + 0.30(0.125) + 0.90(0.625) = 0.025 + 0.0375 + 0.5625 = \mathbf{0.625} \quad \checkmark
+\end{align*}
+
+\begin{ideaclave}
+¿Por qué ocurre esta convergencia? Para que una cadena de Markov tenga una única distribución estacionaria independiente del estado inicial, debe ser \textbf{ergódica}:
+\begin{enumerate}
+  \item \textbf{Irreducible:} Es posible viajar de cualquier estado a cualquier otro con el tiempo (no hay trampas de las que sea imposible escapar).
+  \item \textbf{Aperiódica:} El sistema no oscila en un ciclo rígido como las manecillas de un reloj ($A \to B \to A \to B$).
+\end{enumerate}
+\end{ideaclave}
+
+\paragraph{Conclusión para el sistema de OptiBot:}
+Si dejamos que el almacén funcione en piloto automático sin una estrategia inteligente de mantenimiento, la cinta transportadora pasará un alarmante \textbf{$62.5\%$ del tiempo fuera de servicio por averías}. Este resultado matemático demuestra con total claridad por qué necesitamos agentes inteligentes: OptiBot no puede limitarse a observar cómo se rompen las máquinas; debe aprender a \textbf{tomar acciones óptimas} en cada estado para maximizar la productividad.
 
 \section{Implementación en Python}
-A continuación calculamos la evolución a largo plazo y la distribución estacionaria mediante autovalores y autovectores en NumPy:
+A continuación se presenta el código completo en Python que calcula las proyecciones a corto plazo, demuestra la convergencia de la matriz mediante multiplicaciones sucesivas ($P^k$) y resuelve analíticamente la distribución estacionaria mediante autovectores con NumPy:
 
 \begin{lstlisting}[style=rlcode]
 import numpy as np
 
+# 1. Definicion de la matriz estocastica de transicion P
 P = np.array([
-    [0.70, 0.20, 0.10],
-    [0.10, 0.60, 0.30],
-    [0.10, 0.00, 0.90]
+    [0.70, 0.20, 0.10],  # Fila 1: Nuevo (N)
+    [0.10, 0.60, 0.30],  # Fila 2: Desgastado (D)
+    [0.10, 0.00, 0.90]   # Fila 3: Averiado (A)
 ])
 
-# 1. Proyeccion a 2 pasos
+# 2. Proyeccion temporal a corto plazo (t=1 y t=2) partiendo de pieza Nueva
 mu_0 = np.array([1.0, 0.0, 0.0])
-P_2 = np.linalg.matrix_power(P, 2)
-mu_2 = mu_0 @ P_2
-print("Distribucion en t=2:", np.round(mu_2, 3))
+mu_1 = mu_0 @ P
+mu_2 = mu_0 @ np.linalg.matrix_power(P, 2)
 
-# 2. Calculo de la distribucion estacionaria (pi * P = pi)
-# Equivale a (P.T - I) * pi.T = 0
+print("=== PROYECCION A CORTO PLAZO ===")
+print("Distribucion en t=1 (mu_1):", np.round(mu_1, 3))
+print("Distribucion en t=2 (mu_2):", np.round(mu_2, 3))
+print(f"Probabilidad de averia en t=2: {mu_2[2]*100:.1f}%\n")
+
+# 3. Convergencia multiplicando la matriz por si misma muchas veces (P^k)
+print("=== CONVERGENCIA POR MULTIPLICACION MATRICIAL SUCESIVA ===")
+for k in [1, 2, 5, 10, 50]:
+    Pk = np.linalg.matrix_power(P, k)
+    print(f"Matriz P^{k}:")
+    print(np.round(Pk, 4))
+    print()
+
+# 4. Resolucion algebraica exacta mediante autovectores (pi * P = pi)
+# En algebra lineal, pi * P = pi equivale a P.T * pi.T = pi.T (autovalor lambda = 1)
 evals, evecs = np.linalg.eig(P.T)
-# Buscamos el autovector correspondiente al autovalor 1
 idx = np.argmin(np.abs(evals - 1.0))
 pi_star = np.real(evecs[:, idx])
-pi_star = pi_star / np.sum(pi_star) # Normalizar para que sume 1
+pi_star = pi_star / np.sum(pi_star)  # Normalizamos para que sume 1.0
 
-print("Distribucion Estacionaria pi*:", np.round(pi_star, 4))
-print(f"Porcentaje de tiempo averiada a largo plazo: {pi_star[2]*100:.1f}%")
+estados = ["Nuevo (N)", "Desgastado (D)", "Averiado (A)"]
+print("=== DISTRIBUCION ESTACIONARIA ASINTOTICA (pi*) ===")
+for st, prob in zip(estados, pi_star):
+    print(f"  {st:16s}: {prob*100:6.2f}% del tiempo total")
 \end{lstlisting}
 
 \begin{notabox}
-\textbf{La limitación que motiva el siguiente paso:} En este capítulo hemos dotado al mundo de dinamismo temporal. Sabemos cómo evoluciona el estado del entorno probabilísticamente. Sin embargo, \textbf{somos meros espectadores pasivos}: OptiBot no puede intervenir para reparar la cinta ni para cambiar su trayectoria. ¿Qué ocurre si unimos las \textbf{acciones con recompensas} del Capítulo~\ref{cap:bandidos} con los \textbf{estados dinámicos} del Capítulo~\ref{cap:markov}? La respuesta es la estructura nuclear del aprendizaje por refuerzo: el \textbf{Proceso de Decisión de Markov}.
+Las Cadenas de Markov nos permiten describir y predecir cómo cambia un entorno estocástico con el tiempo. Sin embargo, en este modelo el agente es un simple espectador pasivo: las probabilidades ocurren por sí solas y no hay posibilidad de intervenir.
+
+En el siguiente capítulo daremos el gran salto: uniremos las \textbf{acciones y recompensas} del Capítulo~\ref{cap:bandidos} con los \textbf{estados dinámicos} de este capítulo. Esta combinación da lugar a la estructura reina del Aprendizaje por Refuerzo: el \textbf{Proceso de Decisión de Markov (MDP)}, el cual estudiaremos en el Capítulo~\ref{cap:mdp}.
 \end{notabox}

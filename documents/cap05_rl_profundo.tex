@@ -1,0 +1,353 @@
+\chapter{Aprendizaje por Refuerzo Profundo: Deep Q-Learning (DQN)}
+\label{cap:deep_qlearning}
+\label{cap:rl_profundo}
+\label{cap:dqn}
+\label{cap:proyecto_fronteras}
+
+\section{De Tablas Discretas a Aproximadores de Funciones Continuos}
+En el Capítulo~\ref{cap:rl_tradicional}, constatamos la contundencia conceptual del algoritmo Q-Learning tabular, pero también su mayor limitación: la incapacidad intrínseca de escalar hacia entornos continuos o de alta dimensionalidad debido a la \textbf{maldición de la dimensionalidad}.
+
+Cuando un agente interactúa con el mundo físico, sus sensores proporcionan flujos de información continuos. Para que un sistema de aprendizaje sea operativo en tales escenarios, no es viable memorizar de forma estanca cada punto del espacio de estados; el agente debe poseer la capacidad de \textbf{generalización inductiva}:
+\begin{quote}
+  \textit{Si un robot aprende a evadir un obstáculo cuando su sensor LiDAR marca $1.50\text{ m}$, debe ser capaz de inferir una maniobra evasiva similar cuando el sensor reporte $1.52\text{ m}$, sin necesidad de haber experimentado exactamente esa lectura en el pasado.}
+\end{quote}
+
+Para lograrlo, la tabla matricial $Q(s, a)$ se sustituye por una \textbf{función paramétrica diferenciable} implementada mediante una red neuronal artificial profunda:
+\begin{equation}
+  Q(s, a; \boldsymbol{\theta}) \approx Q^*(s, a)
+\end{equation}
+donde $\boldsymbol{\theta} \in \mathbb{R}^d$ agrupa todos los pesos sinápticos y sesgos (\textit{biases}) ajustables de la red.
+
+\begin{optibot}
+En esta etapa culminante, OptiBot deja atrás el tablero discreto y se conecta en tiempo real a su banco de telemetría sensorial continua. En cada milisegundo de muestreo, el procesador central del robot captura un vector de estado continuo de cuatro dimensiones $\mathbf{s} \in \mathbb{R}^4$:
+\begin{enumerate}
+  \item $d_{\text{LiDAR}} \in [0.05, 15.0]\text{ m}$: Distancia continua al obstáculo más próximo medida por el escáner láser frontal.
+  \item $b_{\text{bat}} \in [0.0, 100.0]\%$: Nivel porcentual continuo de energía en los acumuladores de litio.
+  \item $v_{\text{act}} \in [0.0, 2.5]\text{ m/s}$: Velocidad lineal instantánea del vehículo en el pasillo.
+  \item $\theta_{\text{meta}} \in [-\pi, \pi]\text{ rad}$: Error angular de orientación respecto a la bahía de descarga.
+\end{enumerate}
+
+Este vector continuo $\mathbf{s}$ se alimenta a la entrada de una red neuronal profunda, la cual produce simultáneamente a su salida una estimación continua del valor $Q(\mathbf{s}, a; \boldsymbol{\theta})$ para cada una de sus cuatro acciones discretas de movimiento:
+\[
+  \mathcal{A} = \{\text{Avanzar}, \, \text{GirarIzquierda}, \, \text{GirarDerecha}, \, \text{Frenar}\}
+\]
+\end{optibot}
+
+\section{La Tríada Mortal: Por qué el RL Profundo Ingenuo Fracasa}
+Durante más de dos décadas, los investigadores intentaron sustituir directamente la tabla de Q-Learning por una red neuronal clásica, aplicando descenso de gradiente estándar tras cada paso. El resultado invariable fue el fracaso rotundo: las redes neuronales oscilaban caóticamente, los pesos explotaban hacia infinito o sufrían colapsos catastróficos de rendimiento.
+
+Richard Sutton y Andrew Barto identificaron con precisión las tres condiciones concurrentes que provocan esta inestabilidad severa, bautizándolas colectivamente como la \textbf{Tríada Mortal}:
+\begin{enumerate}
+  \item \textbf{Aproximador de funciones no lineal:} El uso de redes neuronales profundas con capas de activación no lineales (como ReLU o GELU).
+  \item \textbf{Bootstrapping:} La actualización de las estimaciones basándose en predicciones de la propia red en pasos temporales futuros ($R + \gamma \max Q$).
+  \item \textbf{Entrenamiento fuera de política (\textit{Off-Policy}):} El aprendizaje de la política óptima codiciosa a partir de datos recolectados bajo una política exploratoria divergente.
+\end{enumerate}
+
+\subsection{Las Dos Patologías Destructivas del Aprendizaje}
+Cuando la Tríada Mortal se manifiesta en una arquitectura ingenua, desencadena dos patologías fatales:
+
+\subsubsection*{1. Correlación temporal en las observaciones y olvido catastrófico}
+En el aprendizaje supervisado clásico, los algoritmos de optimización se fundamentan en el supuesto de que las muestras de entrenamiento son \textbf{independientes e idénticamente distribuidas} (i.i.d.). 
+
+En el aprendizaje por refuerzo, este supuesto se viola de manera flagrante: el robot experimenta secuencias temporales contiguas fuertemente correlacionadas ($s_{t+1}$ depende directamente de $s_t$). Si OptiBot atraviesa un pasillo oscuro durante diez minutos, la red solo recibe datos de penumbra y ajusta sus pesos exclusivamente para ese entorno, sufriendo un \textbf{olvido catastrófico} de todo lo que había aprendido previamente en zonas iluminadas.
+
+\subsubsection*{2. El problema del blanco móvil (\textit{Moving Target})}
+En la regla de actualización estándar de Q-Learning, el objetivo hacia el cual se ajusta la red es:
+\begin{equation}
+  y_t = R_{t+1} + \gamma \max_{a'} Q(S_{t+1}, a'; \boldsymbol{\theta})
+\end{equation}
+¡Nótese que el objetivo depende directamente de los mismos parámetros $\boldsymbol{\theta}$ que se están intentando ajustar! 
+
+Cuando el optimizador modifica $\boldsymbol{\theta}$ para corregir la predicción en el estado actual $S_t$, altera involuntariamente las predicciones en el estado futuro $S_{t+1}$. Esto equivale a pedirle a un tirador que acierte en una diana que se mueve a la misma velocidad que su propio brazo: el modelo persigue un blanco dinámicamente inestable, induciendo divergencia exponencial.
+
+\section{La Revolución de DQN: Los Dos Mecanismos Estabilizadores (DeepMind, 2015)}
+En 2015, Volodymyr Mnih y el equipo de Google DeepMind publicaron en la prestigiosa revista \textit{Nature} el algoritmo \textbf{Deep Q-Network} (DQN). Lograron entrenar una única red neuronal profunda para jugar a más de 40 videojuegos clásicos de Atari 2600 directamente a partir de los píxeles de la pantalla, superando el nivel de jugadores humanos profesionales.
+
+La genialidad de DQN radicó en neutralizar las patologías de la Tríada Mortal mediante la incorporación de dos mecanismos arquitectónicos revolucionarios:
+
+\subsection{1. Buffer de Repetición de Experiencias (\textit{Experience Replay})}
+En lugar de entrenar la red con la transición inmediata producida en cada paso y luego descartarla, el agente almacena cada una de sus vivencias en una memoria finita circular denominada \textbf{Replay Buffer} ($\mathcal{D}$):
+\begin{equation}
+  e_t = \Big( s_t, \, a_t, \, r_{t+1}, \, s_{t+1}, \, \text{terminado}_{t+1} \Big) \in \mathcal{D}
+\end{equation}
+
+Durante la fase de optimización, el algoritmo no entrena con la última transición; en su lugar, \textbf{extrae un mini-batch de transiciones muestreadas al azar de manera uniforme} de $\mathcal{D}$.
+\begin{itemize}
+  \item \textbf{Ruptura de correlaciones temporales:} Al mezclar aleatoriamente transiciones de diferentes episodios y momentos temporales dispares, se restaura el régimen estadístico i.i.d.
+  \item \textbf{Eficiencia muestral masiva:} Cada experiencia costosa recolectada en el entorno físico puede reutilizarse en decenas de actualizaciones de gradiente a lo largo del tiempo.
+\end{itemize}
+
+\subsection{2. Red Objetivo Congelada (\textit{Target Network})}
+Para solucionar definitivamente el problema del blanco móvil, DQN desacopla el cálculo del objetivo manteniendo \textbf{dos conjuntos independientes de parámetros neuronales}:
+\begin{enumerate}
+  \item \textbf{Red Online ($\boldsymbol{\theta}$):} La red neuronal principal cuyos pesos se actualizan continuamente en cada paso de gradiente. Es la red que decide las acciones del agente.
+  \item \textbf{Red Objetivo o Target Network ($\boldsymbol{\theta}^-$):} Una copia estructural idéntica cuyos parámetros se mantienen \textbf{estrictamente fijos y congelados} durante un período de $C$ pasos temporales.
+\end{enumerate}
+
+El objetivo de Bellman para cada muestra $i$ del mini-batch se calcula evaluando exclusivamente los pesos congelados de la red target:
+\begin{equation}
+  \label{eq:dqn_target}
+  y_i = r_i + \gamma (1 - \text{terminado}_i) \max_{a' \in \mathcal{A}} Q(s'_i, a'; \boldsymbol{\theta}^-)
+\end{equation}
+
+Dado que los parámetros $\boldsymbol{\theta}^-$ permanecen congelados, el objetivo $y_i$ actúa como un valor constante y estacionario durante la optimización. Periódicamente (cada $C$ pasos), los pesos de la red online se copian hacia la red objetivo ($\boldsymbol{\theta}^- \leftarrow \boldsymbol{\theta}$), o alternativamente se actualizan de forma suave mediante promedio de Polyak:
+\begin{equation}
+  \boldsymbol{\theta}^- \leftarrow \tau \boldsymbol{\theta} + (1 - \tau) \boldsymbol{\theta}^- \quad (\text{con } \tau \ll 1, \text{ típicamente } \tau = 0.005)
+\end{equation}
+
+\section{Función de Pérdida y Descenso de Gradiente}
+Con el objetivo $y_i$ estabilizado, el entrenamiento de la red online se formula como un problema de regresión supervisada, minimizando el \textbf{Error Cuadrático Medio de Bellman} (\textit{Mean Squared Bellman Error}, o MSBE):
+\begin{equation}
+  \mathcal{L}(\boldsymbol{\theta}) = \frac{1}{B} \sum_{i=1}^B \Big( y_i - Q(s_i, a_i; \boldsymbol{\theta}) \Big)^2
+\end{equation}
+donde $B$ denota el tamaño del mini-batch (habitualmente $B = 32$ o $64$).
+
+\subsection{Pérdida de Huber (Smooth L1 Loss)}
+En presencia de transiciones con recompensas atípicas o discontinuidades abruptas, el error al cuadrado puede producir gradientes descomunales que desestabilicen los pesos de la red. Por ello, DQN sustituye comúnmente el error cuadrático por la \textbf{Pérdida de Huber}:
+\begin{equation}
+  \mathcal{L}_{\text{Huber}}(\delta) = \begin{cases}
+    \frac{1}{2} \delta^2 & \text{si } |\delta| \le 1.0 \\[6pt]
+    |\delta| - \frac{1}{2} & \text{en otro caso}
+  \end{cases}
+\end{equation}
+La función de Huber se comporta cuadráticamente para errores pequeños (facilitando una convergencia suave y precisa) y linealmente para errores grandes (impidiendo la explosión del gradiente).
+
+\subsection{El Enfoque del Semi-Gradiente}
+Al calcular la derivada de la pérdida respecto a los parámetros de la red online $\boldsymbol{\theta}$, el término objetivo $y_i$ se trata formalmente como una constante externa fija:
+\begin{equation}
+  \nabla_{\boldsymbol{\theta}} \mathcal{L}(\boldsymbol{\theta}) = -\frac{2}{B} \sum_{i=1}^B \Big( y_i - Q(s_i, a_i; \boldsymbol{\theta}) \Big) \nabla_{\boldsymbol{\theta}} Q(s_i, a_i; \boldsymbol{\theta})
+\end{equation}
+Este método se denomina \textbf{semi-gradiente} porque omite deliberadamente el efecto que $\boldsymbol{\theta}$ tendría sobre el objetivo futuro (el cual se encuentra congelado en $\boldsymbol{\theta}^-$).
+
+\section{Cálculo Numérico Paso a Paso: Flujo de Tensores en OptiBot}
+Para desmitificar el funcionamiento interno de una red neuronal en RL, sigamos minuciosamente el cálculo numérico para una muestra extraída del Replay Buffer de OptiBot:
+
+\begin{calculomanual}
+Considérese una transición extraída aleatoriamente de la memoria de repetición con hiperparámetros: factor de descuento $\gamma = 0.95$ y tasa de aprendizaje $\eta = 0.001$.
+
+\textbf{Datos de la transición extraída:}
+\begin{itemize}
+  \item Estado inicial continuo: $\mathbf{s} = [1.20\text{ m}, \, 85.0\%, \, 1.50\text{ m/s}, \, 0.10\text{ rad}]^T$.
+  \item Acción ejecutada en ese instante: $a = 0$ (\textit{Avanzar}).
+  \item Recompensa recibida del entorno: $r = +1.50$.
+  \item Estado sucesor alcanzado: $\mathbf{s}' = [0.80\text{ m}, \, 84.8\%, \, 1.60\text{ m/s}, \, 0.05\text{ rad}]^T$.
+  \item Bandera de episodio terminal: $\text{terminado} = \text{Falso}$ ($0$).
+\end{itemize}
+
+\textbf{Paso 1: Paso hacia adelante en la Red Target con $\mathbf{s}'$}
+El vector de estado futuro $\mathbf{s}'$ se propaga por la red congelada $Q(\cdot; \boldsymbol{\theta}^-)$, obteniéndose las siguientes predicciones para cada acción admisible:
+\begin{center}
+\small\setlength{\tabcolsep}{4pt}
+\begin{tabular}{ccccc}
+  \toprule
+  Acción & $a'=0$ (Avanzar) & $a'=1$ (GirarIzq) & $a'=2$ (GirarDer) & $a'=3$ (Frenar) \\
+  \midrule
+  $Q(\mathbf{s}', a'; \boldsymbol{\theta}^-)$ & $4.20$ & $6.50$ & $3.80$ & $1.10$ \\
+  \bottomrule
+\end{tabular}
+\end{center}
+La mejor opción futura predicha por la red target es $a'=1$ con valor:
+\[
+  \max_{a' \in \mathcal{A}} Q(\mathbf{s}', a'; \boldsymbol{\theta}^-) = \mathbf{6.50}
+\]
+
+\textbf{Paso 2: Cómputo del Objetivo Bellman Congelado ($y$)}
+Aplicando la ecuación~(\ref{eq:dqn_target}):
+\begin{align*}
+  y &= r + \gamma (1 - \text{terminado}) \max_{a'} Q(\mathbf{s}', a'; \boldsymbol{\theta}^-) \\
+    &= 1.50 + (0.95 \times 1 \times 6.50) \\
+    &= 1.50 + 6.175 = \mathbf{7.675}
+\end{align*}
+
+\textbf{Paso 3: Paso hacia adelante en la Red Online con $\mathbf{s}$}
+Se evalúa el estado inicial $\mathbf{s}$ en la red online activa $Q(\cdot; \boldsymbol{\theta})$:
+\[
+  Q(\mathbf{s}, a=0; \boldsymbol{\theta}) = \mathbf{5.100}
+\]
+
+\textbf{Paso 4: Determinación del Error TD ($\delta$) y Pérdida Cuadrática}
+El error entre la predicción activa y el objetivo fijado resulta:
+\[
+  \delta = y - Q(\mathbf{s}, a=0; \boldsymbol{\theta}) = 7.675 - 5.100 = \mathbf{+2.575}
+\]
+La pérdida cuadrática correspondiente para este ejemplo es:
+\[
+  \mathcal{L} = \delta^2 = (2.575)^2 \approx \mathbf{6.63}
+\]
+
+\textbf{Paso 5: Retropropagación y Actualización de Parámetros}
+El algoritmo calcula el gradiente $\nabla_{\boldsymbol{\theta}} \mathcal{L}$ mediante diferenciación automática (\textit{Backpropagation}). El optimizador (como Adam) ajusta los pesos de la red online en dirección opuesta al gradiente, incrementando el valor de salida $Q(\mathbf{s}, a=0; \boldsymbol{\theta})$ para aproximarlo a $7.675$.
+
+Mientras tanto, los parámetros de la red target $\boldsymbol{\theta}^-$ permanecen completamente inmutables, garantizando una optimización sin oscilaciones.
+\end{calculomanual}
+
+\section{Double DQN (DDQN): Eliminación del Sesgo de Sobreestimación}
+A pesar de su éxito, el algoritmo DQN estándar padece una imperfección matemática inherente: \textbf{el sesgo sistemático de sobreestimación} inducido por el operador $\max_{a'}$.
+
+En presencia de ruido estocástico o imprecisiones de aproximación de la red, la esperanza matemática del máximo entre variables aleatorias siempre es mayor o igual que el máximo de sus esperanzas:
+\begin{equation}
+  \mathbb{E} \left[ \max_{a} X_a \right] \ge \max_{a} \mathbb{E}[X_a]
+\end{equation}
+Dado que DQN utiliza el mismo conjunto de pesos $\boldsymbol{\theta}^-$ tanto para \textbf{seleccionar} cuál es la mejor acción como para \textbf{evaluar} su valor, tiende a sobreestimar sistemáticamente los valores $Q$, lo que puede degradar la política en entornos complejos.
+
+Para erradicar este problema, Hado van Hasselt et al. (2016) introdujeron **Double DQN** (DDQN), desacoplando completamente ambos roles:
+\begin{equation}
+  \label{eq:ddqn_target}
+  y_i^{\text{DDQN}} = r_i + \gamma (1 - \text{terminado}_i) Q\left( s'_i, \, \underbrace{\arg\max_{a' \in \mathcal{A}} Q(s'_i, a'; \boldsymbol{\theta})}_{\text{Selección con Red Online}}; \, \underbrace{\boldsymbol{\theta}^-}_{\text{Evaluación con Red Target}} \right)
+\end{equation}
+\begin{itemize}
+  \item La \textbf{Red Online} ($\boldsymbol{\theta}$) decide qué acción es la mejor candidata.
+  \item La \textbf{Red Target} ($\boldsymbol{\theta}^-$) calcula de manera imparcial el valor $Q$ atribuible a esa acción elegida.
+\end{itemize}
+Si una acción fue sobreestimada por azar en la red target, es improbable que la red online coincida en seleccionarla, cancelando de raíz el sesgo positivo sistemático.
+
+\section{Implementación Modular Completa en PyTorch: OptiBot DQN}
+A continuación se detalla la implementación en Python utilizando PyTorch, estructurada de manera modular para robótica móvil:
+
+\begin{lstlisting}[style=rlcode]
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import numpy as np
+import random
+from collections import deque
+
+# ============================================================
+# 1. Arquitectura de la Red Q Profunda
+# ============================================================
+class RedQOptiBot(nn.Module):
+    def __init__(self, dim_estado=4, n_acciones=4):
+        super().__init__()
+        self.red = nn.Sequential(
+            nn.Linear(dim_estado, 64),
+            nn.ReLU(),
+            nn.Linear(64, 64),
+            nn.ReLU(),
+            nn.Linear(64, n_acciones)
+        )
+
+    def forward(self, x):
+        return self.red(x)
+
+
+# ============================================================
+# 2. Buffer de Repeticion de Experiencias (Experience Replay)
+# ============================================================
+class BufferReplay:
+    def __init__(self, capacidad=50000):
+        self.memoria = deque(maxlen=capacidad)
+
+    def guardar(self, s, a, r, s_sig, terminado):
+        self.memoria.append((s, a, r, s_sig, float(terminado)))
+
+    def muestrear_lote(self, batch_size=32):
+        lote = random.sample(self.memoria, batch_size)
+        s, a, r, s_sig, d = zip(*lote)
+        
+        # Conversion eficiente a tensores de PyTorch
+        return (torch.FloatTensor(np.array(s)),
+                torch.LongTensor(a).unsqueeze(1),
+                torch.FloatTensor(r).unsqueeze(1),
+                torch.FloatTensor(np.array(s_sig)),
+                torch.FloatTensor(d).unsqueeze(1))
+
+    def __len__(self):
+        return len(self.memoria)
+
+
+# ============================================================
+# 3. Agente Deep Q-Network (Double DQN)
+# ============================================================
+class AgenteDQN:
+    def __init__(self, dim_estado=4, n_acciones=4, lr=1e-3, gamma=0.99, tau=0.005):
+        self.n_acciones = n_acciones
+        self.gamma = gamma
+        self.tau = tau
+        self.epsilon = 1.0
+        self.eps_min = 0.02
+        self.decaimiento = 0.995
+
+        # Red Online y Red Target
+        self.red_online = RedQOptiBot(dim_estado, n_acciones)
+        self.red_target = RedQOptiBot(dim_estado, n_acciones)
+        self.red_target.load_state_dict(self.red_online.state_dict())
+
+        self.optimizador = optim.Adam(self.red_online.parameters(), lr=lr)
+        self.criterio_perdida = nn.SmoothL1Loss()  # Perdida de Huber
+
+    def seleccionar_accion(self, estado):
+        # Exploracion vs Explotacion (epsilon-greedy)
+        if np.random.rand() < self.epsilon:
+            return np.random.randint(self.n_acciones)
+        
+        with torch.no_grad():
+            s_tensor = torch.FloatTensor(estado).unsqueeze(0)
+            valores_q = self.red_online(s_tensor)
+            return int(valores_q.argmax(dim=1).item())
+
+    def aprender_de_lote(self, buffer, batch_size=32):
+        if len(buffer) < batch_size:
+            return 0.0
+
+        estados, acciones, recompensas, estados_sig, terminados = buffer.muestrear_lote(batch_size)
+
+        with torch.no_grad():
+            # Double DQN: seleccion con red online, evaluacion con red target
+            mejores_acciones = self.red_online(estados_sig).argmax(dim=1, keepdim=True)
+            q_futuro = self.red_target(estados_sig).gather(1, mejores_acciones)
+            objetivos = recompensas + self.gamma * (1.0 - terminados) * q_futuro
+
+        # Prediccion de la red online para las acciones efectivamente tomadas
+        q_predichos = self.red_online(estados).gather(1, acciones)
+
+        # Calculo de perdida y retropropagacion
+        perdida = self.criterio_perdida(q_predichos, objetivos)
+        self.optimizador.zero_grad()
+        perdida.backward()
+        self.optimizador.step()
+
+        # Actualizacion suave de la red target (Polyak soft-update)
+        for p_t, p_o in zip(self.red_target.parameters(), self.red_online.parameters()):
+            p_t.data.copy_(self.tau * p_o.data + (1.0 - self.tau) * p_t.data)
+
+        # Reduccion progresiva de epsilon
+        self.epsilon = max(self.eps_min, self.epsilon * self.decaimiento)
+        return perdida.item()
+\end{lstlisting}
+
+\section{Comparativa Global: De las Tablas a las Redes Neuronales}
+La Tabla~\ref{tab:comparativa_rl} resume la transición paradigmática recorrida a lo largo de este curso, contrastando las dos grandes eras del Aprendizaje por Refuerzo:
+
+\begin{table}[htbp]
+  \centering
+  \small
+  \begin{tabular}{@{}p{3.5cm}p{5.5cm}p{5.5cm}@{}}
+    \toprule
+    \textbf{Dimensión} & \textbf{RL Tradicional (Q-Learning)} & \textbf{RL Profundo (DQN)} \\
+    \midrule
+    \textbf{Representación} & Matriz o tabla discreta $Q(s, a)$. & Red Neuronal Profunda paramétrica $Q(s, a; \boldsymbol{\theta})$. \\
+    \addlinespace
+    \textbf{Espacio de Estados} & Finito y reducido (pocos estados discretos). & Continuo, sensorial y de alta dimensionalidad ($\mathbb{R}^d$, imágenes). \\
+    \addlinespace
+    \textbf{Generalización} & Nula: cada celda $(s, a)$ debe visitarse de forma individual. & Total: interpola comportamientos óptimos para estados jamás observados. \\
+    \addlinespace
+    \textbf{Garantías Teóricas} & Convergencia asintótica garantizada con probabilidad 1 (Watkins). & Convergencia empírica; sujeto a la Tríada Mortal si no se estabiliza. \\
+    \addlinespace
+    \textbf{Estabilizadores Clave} & Tasa de aprendizaje decreciente $\alpha_t$ y política $\varepsilon$-greedy. & Buffer de Repetición de Experiencias y Red Objetivo Congelada. \\
+    \bottomrule
+  \end{tabular}
+  \caption{Comparativa estructural entre el Aprendizaje por Refuerzo Tradicional y Profundo.}
+  \label{tab:comparativa_rl}
+\end{table}
+
+\begin{notabox}
+\textbf{Conclusión del Curso y Perspectivas Futuras:}
+A lo largo de este manual, hemos construido de forma progresiva, rigurosa y transparente el andamiaje completo del Aprendizaje por Refuerzo:
+\begin{itemize}
+  \item Partimos de la cuantificación de la incertidumbre probabilística y los bandidos multibrazo.
+  \item Formalizamos las transiciones dinámicas mediante Cadenas y Procesos de Decisión de Markov, deduciendo analíticamente las Ecuaciones de Bellman.
+  \item Desarrollamos el control libre de modelo mediante Diferencia Temporal y Q-Learning tradicional.
+  \item Finalmente, conquistamos los espacios continuos mediante el Aprendizaje por Refuerzo Profundo y las redes DQN.
+\end{itemize}
+Con estas bases matemáticas y computacionales, el estudiante se encuentra plenamente capacitado para abordar las fronteras avanzadas del aprendizaje autónomo, tales como los métodos de Gradiente de Política (\textit{Policy Gradients}, PPO, SAC) y los sistemas modernos de alineamiento inteligente.
+\end{notabox}

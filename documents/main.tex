@@ -13,7 +13,7 @@
 \renewcommand{\familydefault}{\sfdefault}
 \usepackage{microtype}
 \usepackage{amsmath,amssymb,mathtools}
-\usepackage{booktabs,array}
+\usepackage{booktabs,array,multirow}
 \usepackage{geometry}
 \geometry{
   top=2.8cm,
@@ -26,7 +26,7 @@
 \usepackage{titlesec}
 \usepackage{listings}
 \usepackage{tikz}
-\usetikzlibrary{arrows.meta,calc,positioning,shapes.geometric}
+\usetikzlibrary{arrows.meta,calc,positioning,shapes.geometric,babel}
 \usepackage[most]{tcolorbox}
 \usepackage{hyperref}
 
@@ -102,6 +102,7 @@
   right=12pt,
   top=8pt,
   bottom=8pt,
+  breakable,
   title={\textbf{\textcolor{Coral}{Idea Clave}}},
   fonttitle=\sffamily\bfseries,
   coltitle=Coral,
@@ -117,6 +118,7 @@
   right=12pt,
   top=8pt,
   bottom=8pt,
+  breakable,
   title={\textbf{\textcolor{Teal}{OptiBot en Acción: Caso Conductor}}},
   fonttitle=\sffamily\bfseries,
   coltitle=Teal,
@@ -132,6 +134,7 @@
   right=12pt,
   top=8pt,
   bottom=8pt,
+  breakable,
   title={\textbf{\textcolor{Leaf}{Cálculo Manual Paso a Paso}}},
   fonttitle=\sffamily\bfseries,
   coltitle=Leaf,
@@ -147,6 +150,7 @@
   right=10pt,
   top=6pt,
   bottom=6pt,
+  breakable,
   title={\textbf{\textcolor{SoftText}{Nota de Diseño y Conexión}}},
   fonttitle=\sffamily\small\bfseries,
   coltitle=SoftText,
@@ -156,21 +160,36 @@
 % ---------- Estilo de Código Python ----------
 \lstdefinestyle{rlcode}{
   language=Python,
-  backgroundcolor=\color{CodeBg},
-  basicstyle=\ttfamily\footnotesize\color{white!92},
-  keywordstyle=\bfseries\color{Gold},
-  commentstyle=\itshape\color{Leaf!85},
-  stringstyle=\color{Coral!85},
-  numbers=left,
-  numberstyle=\tiny\color{white!40},
-  numbersep=8pt,
+  basicstyle=\ttfamily\footnotesize\color{white},
+  identifierstyle=\color{white},
+  keywordstyle=\bfseries\color[HTML]{FBD38D},    % Amarillo dorado claro y legible
+  commentstyle=\itshape\color[HTML]{81E6D9},    % Verde menta / cian suave de alto contraste
+  stringstyle=\color[HTML]{FEB2B2},             % Coral pastel brillante
+  numbers=none,                                 % Sin numeracion de lineas
   frame=none,
   showstringspaces=false,
   breaklines=true,
   tabsize=2,
-  xleftmargin=1.8em,
-  aboveskip=10pt,
-  belowskip=10pt
+  xleftmargin=0.4em,
+  aboveskip=0pt,
+  belowskip=0pt
+}
+
+% Envoltura solida con tcolorbox para evitar lineas blancas entre filas de codigo
+\tcolorboxenvironment{lstlisting}{
+  breakable,
+  colback=CodeBg,
+  colframe=CodeBg,
+  coltext=white,
+  colupper=white,
+  arc=3pt,
+  boxrule=0pt,
+  left=8pt,
+  right=8pt,
+  top=8pt,
+  bottom=8pt,
+  before skip=10pt,
+  after skip=10pt
 }
 
 % ---------- Metadatos del documento ----------
@@ -188,48 +207,42 @@
 
 \maketitle
 
-\chapter*{Prólogo y Guía Pedagógica}
-\addcontentsline{toc}{chapter}{Prólogo y Guía Pedagógica}
+\chapter*{Prólogo: Fundamentos del Aprendizaje por Refuerzo}
+\addcontentsline{toc}{chapter}{Prólogo: Fundamentos del Aprendizaje por Refuerzo}
 
-Bienvenido al texto integral del curso \textbf{Aprendizaje por Refuerzo: De la Probabilidad a las Redes Neuronales Profundas}. 
+El aprendizaje por refuerzo (\textit{Reinforcement Learning}, o RL) constituye uno de los paradigmas más representativos y potentes de la inteligencia artificial contemporánea. A diferencia del aprendizaje supervisado clásico, en el cual los modelos dependen de conjuntos de datos previamente etiquetados por un instructor externo, el aprendizaje por refuerzo modela el proceso mediante el cual un agente autónomo aprende a tomar decisiones óptimas interactuando directamente con su entorno mediante ensayo, error y señales escalares de recompensa.
 
-Este curso ha sido diseñado desde cero bajo una filosofía pedagógica estricta: \textbf{cualquier persona con conocimientos elementales de programación en Python y álgebra básica puede y debe comprender la teoría matemática y algorítmica del Aprendizaje por Refuerzo (RL) con total claridad, rigor y profundidad}.
+\section*{Alcance y Estructura del Texto}
+Este texto ha sido estructurado con el objetivo de ofrecer una exposición progresiva, autosuficiente y matemáticamente transparente para estudiantes e ingenieros que posean conocimientos elementales de programación en Python y álgebra básica.
 
-\section*{La Metodología: Lápiz, Papel y Código}
-Cada concepto fundamental se aborda en tres fases secuenciales e inseparables:
+No se asumen conocimientos avanzados previos en probabilidad axiomática, procesos estocásticos ni teoría de control moderno. Cada concepto fundamental se introduce a partir de sus principios elementales, vinculando tres componentes en cada etapa:
 \begin{enumerate}
-  \item \textbf{Intuición conceptual:} ¿Qué problema físico o lógico intentamos resolver?
-  \item \textbf{Cálculo manual en la pizarra (Lápiz y Papel):} Desarrollamos los números a mano para un caso reducido, asegurando que las variables y fórmulas no sean una ``caja negra''.
-  \item \textbf{Implementación algorítmica (Código Python):} Traducimos la matemática a scripts concisos en NumPy o PyTorch, verificando que la simulación por computadora reproduzca con exactitud el resultado teórico.
+  \item \textbf{Intuición conceptual:} El planteamiento físico o lógico del problema de toma de decisiones.
+  \item \textbf{Deducción y cálculo manual paso a paso:} El desarrollo explícito de los cálculos numéricos y algebraicos en casos reducidos, permitiendo comprender la mecánica exacta de las ecuaciones.
+  \item \textbf{Implementación algorítmica:} La traducción directa de las fórmulas matemáticas a implementaciones ejecutables y reproducibles en Python (NumPy y PyTorch).
 \end{enumerate}
 
-\section*{El Hilo Conductor: OptiBot en el Almacén Inteligente}
-Para evitar la confusión clásica provocada por cambiar de ejemplo en cada lección, a lo largo de todo el libro seguiremos a un único protagonista: \textbf{OptiBot}, un robot móvil autónomo que opera en un centro de distribución y logística. A medida que avanza el curso, el robot se enfrenta a problemas progresivamente más complejos:
+\section*{El Hilo Conductor: El Sistema Logístico OptiBot}
+Con el fin de mantener una coherencia conceptual continua a lo largo de toda la obra, el desarrollo teórico se articula en torno a un caso de aplicación industrial representativo: \textbf{OptiBot}, un robot móvil autónomo destinado a la gestión de inventario y transporte de carga en un almacén inteligente.
 \begin{itemize}
-  \item \textbf{Capítulo 0:} Cuantifica la incertidumbre estocástica de los tiempos de entrega.
-  \item \textbf{Capítulo 1:} Elige entre 4 empresas de mensajería (Bandidos Multi-Brazo).
-  \item \textbf{Capítulo 2:} Modela la degradación aleatoria de la cinta transportadora (Cadenas de Markov).
-  \item \textbf{Capítulo 3:} Navega entre zonas del almacén con recompensas y costos (MDP y Ecuaciones de Bellman).
-  \item \textbf{Capítulo 4:} Calcula la ruta perfecta conociendo los planos exactos del almacén (Programación Dinámica).
-  \item \textbf{Capítulo 5:} Aprende a evaluar rutas promediando turnos completos sin planos (Métodos Monte Carlo).
-  \item \textbf{Capítulo 6:} Aprende paso a paso tras cada movimiento individual (SARSA y Q-Learning).
-  \item \textbf{Capítulo 7:} Conecta sensores continuos (LiDAR, batería en \%, velocidad) sustituyendo las tablas por Redes Neuronales (Deep Q-Networks).
-  \item \textbf{Capítulo 8:} Se adapta a un almacén dinámico con obstáculos imprevistos y proyecta su aprendizaje hacia las fronteras del RL moderno (Policy Gradients, PPO, RLHF).
+  \item Los Capítulos 1 y 2 abordan la cuantificación de la incertidumbre estocástica y la toma de decisiones evaluativas bajo el dilema de exploración frente a explotación (Bandidos Multi-Brazo).
+  \item Los Capítulos 3 y 4 formalizan la evolución dinámica del entorno mediante Cadenas de Markov y Procesos de Decisión de Markov (MDP), deduciendo analíticamente las Ecuaciones de Bellman bajo modelos analíticos conocidos.
+  \item El Capítulo 5 desarrolla el \textbf{Aprendizaje por Refuerzo Tradicional}, presentando el salto al aprendizaje libre de modelo mediante Diferencia Temporal y deduciendo exhaustivamente el algoritmo tabular \textbf{Q-Learning}.
+  \item El Capítulo 6 culmina con el \textbf{Aprendizaje por Refuerzo Profundo}, abordando la transición hacia espacios sensoriales continuos mediante Redes Neuronales Profundas y el algoritmo \textbf{Deep Q-Learning (DQN)}.
 \end{itemize}
+
+El texto invita al estudiante a realizar activamente los cálculos manuales y experimentos computacionales propuestos en cada sección, consolidando una comprensión profunda y operativa del aprendizaje por refuerzo.
 
 \newpage
 \tableofcontents
 \newpage
 
-% Inclusión de capítulos auxiliares
-\input{cap00_probabilidad.tex}
-\input{cap01_bandidos.tex}
-\input{cap02_markov.tex}
-\input{cap03_mdp_bellman.tex}
-\input{cap04_dp_gpi.tex}
-\input{cap05_monte_carlo.tex}
-\input{cap06_td_learning.tex}
-\input{cap07_deep_rl.tex}
-\input{cap08_proyecto_fronteras.tex}
+% Inclusión de capítulos del curso
+%\input{cap00_probabilidad.tex}
+%\input{cap01_bandidos.tex}
+%\input{cap02_markov.tex}
+%\input{cap03_mdp_bellman.tex}
+\input{cap04_rl_tradicional.tex}
+\input{cap05_rl_profundo.tex}
 
 \end{document}

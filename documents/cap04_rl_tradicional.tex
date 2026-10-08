@@ -68,11 +68,16 @@ Las reglas de este entorno son transparentes y directas:
   \[
     \mathcal{A} = \{\text{Norte } (\uparrow), \, \text{Sur } (\downarrow), \, \text{Este } (\rightarrow), \, \text{Oeste } (\leftarrow)\}
   \]
-  \item \textbf{Dinámica y Paredes:} Si OptiBot intenta moverse hacia fuera de los límites de la cuadrícula o chocar contra el muro central ($S_5$), el robot rebota contra la pared y permanece en su misma casilla.
+  \item \textbf{Dinámica, Paredes y Salida del Laberinto:}
+  \begin{itemize}
+    \item \textbf{Muro Central ($S_5$):} Es una estantería fija impenetrable. Si OptiBot intenta ingresar a $S_5$, rebota contra el obstáculo y permanece en su misma casilla, sufriendo la penalización normal de paso ($R = -1.0$).
+    \item \textbf{Límites del Laberinto (Game Over):} Si OptiBot intenta moverse hacia fuera de los límites perimetrales de la cuadrícula (por ejemplo, avanzar al Norte o al Oeste desde $S_1$), el robot cae fuera del recinto de trabajo. En este caso, el entorno le aplica una severa penalización de $R = -10.0$ y el episodio concluye de inmediato (\textit{Game Over}, estado terminal con valor futuro nulo).
+  \end{itemize}
   \item \textbf{Señal de Recompensa ($R$):}
   \begin{itemize}
-    \item Cada paso normal cuesta $R = -1$ (penalización por tiempo y consumo de batería).
-    \item Ingresar a la Meta ($S_9$) otorga una gran recompensa de $R = +10$.
+    \item Cada paso ordinario por los pasillos cuesta $R = -1.0$ (penalización por tiempo y consumo de batería).
+    \item Intentar salirse de los límites del laberinto cuesta $R = -10.0$ y causa \textit{Game Over} (fin de episodio con penalización severa).
+    \item Ingresar a la Meta ($S_9$) otorga una gran recompensa de $R = +10.0$ (fin de episodio exitoso).
   \end{itemize}
 \end{enumerate}
 
@@ -133,7 +138,7 @@ En palabras sencillas, esta fórmula representa la regla de navegación de OptiB
 
 \begin{equation}
   \label{eq:q_learning_intuitive}
-  \underbrace{Q(S_t, A_t)}_{\text{Nuevo valor}} \leftarrow \underbrace{Q(S_t, A_t)}_{\text{Valor viejo}} + \alpha \cdot \Big[ \underbrace{\overbrace{R_{t+1}}^{\text{Recompensa en mano}} + \gamma \overbrace{\max_{a'} Q(S_{t+1}, a')}^{\text{Mejor valor del destino}}}_{\text{Realidad experimentada (Objetivo Bellman)}} - \underbrace{Q(S_t, A_t)}_{\text{Lo que creía antes}} \Big]
+  \underbrace{Q(S_t, A_t)}_{\text{Nuevo valor}} \leftarrow \underbrace{Q(S_t, A_t)}_{\text{Valor viejo}} + \alpha \cdot \Big[ \underbrace{\overbrace{R_{t+1}}^{\text{Recompensa inmediata}} + \gamma \overbrace{\max_{a'} Q(S_{t+1}, a')}^{\text{Mejor valor del destino}}}_{\text{Realidad experimentada (Objetivo Bellman)}} - \underbrace{Q(S_t, A_t)}_{\text{Lo que creía antes}} \Big]
 \end{equation}
 
 Desglosemos cada pieza de esta fórmula con total transparencia:
@@ -142,7 +147,7 @@ Desglosemos cada pieza de esta fórmula con total transparencia:
   Es la casilla actual donde estaba el robot ($S_t$) y la dirección en la que decidió moverse ($A_t$). La celda $Q(S_t, A_t)$ es la que vamos a corregir en la tabla.
   
   \item \textbf{La Recompensa Inmediata ($R_{t+1}$):}
-  Es la señal concreta que el entorno devuelve en mano tras dar el paso (por ejemplo, $-1$ por el costo de energía, o $+10$ si aterrizó en la Meta).
+  Es la señal concreta que el entorno devuelve inmediatamente tras dar el paso (por ejemplo, $-1$ por el costo de energía, o $+10$ si aterrizó en la Meta).
 
   \item \textbf{La Mirada al Futuro ($\max_{a'} Q(S_{t+1}, a')$):}
   Cuando OptiBot llega a la nueva casilla ($S_{t+1}$), abre su libreta en la fila de esa nueva casilla y se pregunta:
@@ -166,9 +171,7 @@ Desglosemos cada pieza de esta fórmula con total transparencia:
 \end{enumerate}
 
 \section{El Dilema: ¿Cómo Explorar el Laberinto? (Política \texorpdfstring{$\varepsilon$}{epsilon}-Greedy)}
-Si al principio todas las casillas valen $0.00$, o si OptiBot descubre un camino mediocre y siempre elige la acción con el valor más alto actual, el robot se quedará atrapado repitiendo el mismo camino tonto y jamás descubrirá dónde está la Meta.
-
-Para solucionar esto, se utiliza la estrategia \textbf{$\varepsilon$-greedy} (\textit{épsilon-codiciosa}):
+Si al principio todas las casillas valen $0.00$, o si OptiBot descubre un camino mediocre y siempre elige la acción con el valor más alto actual, el robot se quedará atrapado repitiendo el mismo camino tonto y jamás descubrirá dónde está la Meta. Para solucionar esto, se utiliza la estrategia \textbf{$\varepsilon$-greedy} (\textit{épsilon-codiciosa}):
 \begin{itemize}
   \item Con probabilidad \textbf{$1 - \varepsilon$} (por ejemplo, el 80\% de las veces), el robot \textbf{explota}: elige la dirección que tenga el valor $Q$ más alto en su tabla.
   \item Con probabilidad \textbf{$\varepsilon$} (por ejemplo, el 20\% de las veces), el robot \textbf{explora}: tira una moneda al aire y elige una dirección completamente al azar para explorar rincones desconocidos.
@@ -182,8 +185,9 @@ Para ver cómo funciona la matemática con números exactos, sigamos el recorrid
 \begin{itemize}
   \item Tasa de aprendizaje: $\alpha = 0.50$ (para simplificar los cálculos a números exactos).
   \item Factor de descuento: $\gamma = 0.90$.
-  \item Recompensa de paso normal: $R = -1$.
-  \item Recompensa en la Meta ($S_9$): $R = +10$ (estado terminal con valor futuro $0$).
+  \item Recompensa de paso normal por pasillo: $R = -1.0$.
+  \item Penalización por salirse del laberinto (\textit{Game Over}): $R = -10.0$ (estado terminal con valor futuro $0$).
+  \item Recompensa en la Meta ($S_9$): $R = +10.0$ (estado terminal con valor futuro $0$).
 \end{itemize}
 
 \begin{calculomanual}
@@ -252,37 +256,278 @@ OptiBot está en $S_6$ (justo arriba de la Meta $S_9$):
     Q_{\text{nuevo}}(S_6, \downarrow) = 0.0 + 0.50 \times (+10.0) = \mathbf{+5.00}
   \]
 \end{enumerate}
-\textit{¡Momento revelador!:} La celda que conduce a la Meta no tiene un número negativo; ¡tiene un enorme $+5.00$ positivo! La Meta ha encendido su primera señal luminosa en la tabla.
 
-\subsubsection*{Episodio 2 -- La propagación de la recompensa hacia atrás}
-Al concluir el episodio, OptiBot vuelve a colocarse en el Inicio ($S_1$) para un segundo viaje. Supongamos que vuelve a seguir el camino $S_1 \to S_2 \to S_3$:
+\textit{¡Momento revelador!:} La celda que conduce directamente a la Meta ($S_6, \downarrow$) no tiene un valor negativo; ¡posee un enorme $+5.00$ positivo! La Meta ha encendido su primera señal luminosa en la memoria del agente.
+
+Al finalizar este primer episodio, la Tabla Q queda actualizada como se muestra a continuación:
+
+\begin{center}
+\small
+\begin{tabular}{ccccc}
+  \toprule
+  \textbf{Estado (Casilla)} & \textbf{Norte ($\uparrow$)} & \textbf{Sur ($\downarrow$)} & \textbf{Este ($\rightarrow$)} & \textbf{Oeste ($\leftarrow$)} \\
+  \midrule
+  $S_1$ (Inicio)  & $0.00$ & $0.00$          & $\mathbf{-0.50}$ & $0.00$ \\
+  $S_2$ (Pasillo) & $0.00$ & $0.00$          & $\mathbf{-0.50}$ & $0.00$ \\
+  $S_3$ (Pasillo) & $0.00$ & $\mathbf{-0.50}$ & $0.00$          & $0.00$ \\
+  $S_4$ (Pasillo) & $0.00$ & $0.00$          & $0.00$          & $0.00$ \\
+  $S_5$ (Muro)    & ---    & ---             & ---             & ---    \\
+  $S_6$ (Pasillo) & $0.00$ & $\mathbf{+5.00}$ & $0.00$          & $0.00$ \\
+  $S_7$ (Pasillo) & $0.00$ & $0.00$          & $0.00$          & $0.00$ \\
+  $S_8$ (Pasillo) & $0.00$ & $0.00$          & $0.00$          & $0.00$ \\
+  $S_9$ (Meta)    & $0.00$ & $0.00$          & $0.00$          & $0.00$ \\
+  \bottomrule
+\end{tabular}
+\end{center}
+\textit{Nota:} En negrita se destacan las cuatro únicas celdas modificadas tras recorrer la trayectoria $S_1 \xrightarrow{\rightarrow} S_2 \xrightarrow{\rightarrow} S_3 \xrightarrow{\downarrow} S_6 \xrightarrow{\downarrow} S_9$. Las demás acciones y casillas aún no han sido exploradas y permanecen en $0.00$.
+
+\subsubsection*{Episodio 2 -- Paso 1: Selección basada en la política derivada de Q ($S_1$)}
+OptiBot vuelve a colocarse en la casilla de Inicio ($S_1$) con su Tabla Q actualizada del Episodio 1. 
+
+Siguiendo el algoritmo estricto de Q-Learning, el agente debe elegir la acción $A$ usando una política derivada de $Q$ (en este caso, la regla codiciosa $\arg\max_a Q(S_1, a)$). Consultamos la fila de $S_1$ en la tabla:
+\[
+  Q(S_1, \uparrow) = 0.00, \quad Q(S_1, \downarrow) = 0.00, \quad Q(S_1, \rightarrow) = \mathbf{-0.50}, \quad Q(S_1, \leftarrow) = 0.00
+\]
+
+\textbf{Decisión crucial y la paradoja de los ceros:} 
+El valor más alto en la fila es $\max_a Q(S_1, a) = \mathbf{0.00}$, correspondiente a $\{\uparrow, \downarrow, \leftarrow\}$. La acción Este ($\rightarrow$), penalizada con $-0.50$ tras el paso inicial del Episodio 1, \textbf{no es la opción más alta} y queda descartada por la regla codiciosa.
+
+\textit{¿Por qué Norte y Oeste tienen $0.00$, pareciendo erróneamente mejores que Este ($-0.50$)?}
+Porque son acciones aún no exploradas. En Q-Learning, los ceros iniciales representan una ausencia total de experiencia (optimismo inicial). Si OptiBot intentara en este paso moverse al Norte o al Oeste, se saldría de la cuadrícula, sufriendo la penalización terminal catastrófica de $R = -10.0$ (\textit{Game Over}). En una sola actualización de Bellman, dicha acción se desplomaría a:
+\[
+  Q_{\text{nuevo}}(S_1, \uparrow) = 0.00 + 0.50 \times [-10.0 + \gamma(0) - 0.00] = \mathbf{-5.00}
+\]
+Por tanto, los ceros en los bordes no son valores ventajosos: son una ilusión transitoria que en cuanto se explora se transforma en números fuertemente negativos ($-5.00$ y con más visitas hasta $-10.00$).
+
+Desempatando entre las opciones con valor máximo ($0.00$) en favor de la dirección transitable que no causa Game Over, OptiBot selecciona la acción: \textbf{Sur ($\downarrow$)}.
 \begin{enumerate}
-  \item El robot está en $S_3$ y decide moverse al \textbf{Sur ($\downarrow$)}, aterrizando en $S_6$ con $R = -1$.
-  \item Pero ahora, al mirar la fila de $S_6$ en su tabla, ¡ya no todo vale cero!:
+  \item Selecciona la acción con mayor valor transitable: \textbf{Sur ($\downarrow$)}.
+  \item Aterriza en la casilla $S_4$ y recibe la penalización de paso $R_1 = -1.0$.
+  \item Consulta la fila de la casilla destino $S_4$ en su tabla. Como aún no ha sido explorada, todas sus acciones valen $0.00$:
   \[
-    \max_{a'} Q(S_6, a') = \max(0.00, \, \mathbf{5.00}, \, 0.00, \, 0.00) = \mathbf{5.00}
+    \max_{a'} Q(S_4, a') = \max(0.00, \, 0.00, \, 0.00, \, 0.00) = \mathbf{0.00}
   \]
-  \item El nuevo Objetivo de Bellman para la casilla $S_3$ se beneficia del valor descubierto:
+  \item Calcula el Objetivo de Bellman:
   \[
-    \text{Objetivo} = R + \gamma \max_{a'} Q(S_6, a') = -1 + (0.90 \times 5.00) = -1 + 4.50 = \mathbf{+3.50}
+    \text{Objetivo} = R_1 + \gamma \max_{a'} Q(S_4, a') = -1.0 + (0.90 \times 0.00) = \mathbf{-1.00}
   \]
-  \item Calculamos el Error TD:
+  \item Calcula el Error TD:
   \[
-    \delta = \text{Objetivo} - Q(S_3, \downarrow) = 3.50 - (-0.50) = \mathbf{+4.00}
+    \delta = \text{Objetivo} - Q(S_1, \downarrow) = -1.00 - 0.00 = \mathbf{-1.00}
   \]
-  \item Actualizamos $Q(S_3, \downarrow)$:
+  \item Actualiza la celda $Q(S_1, \downarrow)$:
   \[
-    Q_{\text{nuevo}}(S_3, \downarrow) = -0.50 + 0.50 \times (4.00) = -0.50 + 2.00 = \mathbf{+1.50}
+    Q_{\text{nuevo}}(S_1, \downarrow) = 0.00 + 0.50 \times (-1.00) = \mathbf{-0.50}
   \]
 \end{enumerate}
+
+\subsubsection*{Episodio 2 -- Paso 2: Explorando el pasillo inferior ($S_4$)}
+OptiBot se encuentra en $S_4$:
+\begin{enumerate}
+  \item Todas las acciones en $S_4$ valen $0.00$ ($\max_a Q(S_4, a) = 0.00$). Como hacia el Este chocaría con el Muro ($S_5$), Norte retrocedería y Oeste golpea la pared perimetral, desempata eligiendo la opción máxima hacia la casilla transitable: \textbf{Sur ($\downarrow$)}.
+  \item Aterriza en la casilla $S_7$ y recibe la penalización de paso $R_2 = -1.0$.
+  \item Inspecciona la fila de $S_7$ en su tabla, donde todas las acciones aún valen $0.00$:
+  \[
+    \max_{a'} Q(S_7, a') = \max(0.00, \, 0.00, \, 0.00, \, 0.00) = \mathbf{0.00}
+  \]
+  \item Calcula el Objetivo de Bellman:
+  \[
+    \text{Objetivo} = R_2 + \gamma \max_{a'} Q(S_7, a') = -1.0 + (0.90 \times 0.00) = \mathbf{-1.00}
+  \]
+  \item Calcula el Error TD:
+  \[
+    \delta = \text{Objetivo} - Q(S_4, \downarrow) = -1.00 - 0.00 = \mathbf{-1.00}
+  \]
+  \item Actualiza la celda $Q(S_4, \downarrow)$:
+  \[
+    Q_{\text{nuevo}}(S_4, \downarrow) = 0.00 + 0.50 \times (-1.00) = \mathbf{-0.50}
+  \]
+\end{enumerate}
+
+\subsubsection*{Episodio 2 -- Paso 3: Girando hacia la Meta ($S_7$)}
+OptiBot está en la esquina inferior izquierda ($S_7$):
+\begin{enumerate}
+  \item En $S_7$, todas las acciones valen $0.00$ ($\max_a Q(S_7, a) = 0.00$). Desempatando hacia la salida abierta del pasillo, elige \textbf{Este ($\rightarrow$)}.
+  \item Aterriza en $S_8$ recibiendo la penalización de paso $R_3 = -1.0$.
+  \item Al consultar la fila de la casilla destino $S_8$, todas sus acciones aún valen $0.00$:
+  \[
+    \max_{a'} Q(S_8, a') = \max(0.00, \, 0.00, \, 0.00, \, 0.00) = \mathbf{0.00}
+  \]
+  \item Calcula el Objetivo de Bellman:
+  \[
+    \text{Objetivo} = R_3 + \gamma \max_{a'} Q(S_8, a') = -1.0 + (0.90 \times 0.00) = \mathbf{-1.00}
+  \]
+  \item Calcula el Error TD:
+  \[
+    \delta = \text{Objetivo} - Q(S_7, \rightarrow) = -1.00 - 0.00 = \mathbf{-1.00}
+  \]
+  \item Actualiza la celda $Q(S_7, \rightarrow)$:
+  \[
+    Q_{\text{nuevo}}(S_7, \rightarrow) = 0.00 + 0.50 \times (-1.00) = \mathbf{-0.50}
+  \]
+\end{enumerate}
+
+\subsubsection*{Episodio 2 -- Paso 4: Descubrimiento de la Meta por el Sur ($S_8$)}
+OptiBot está en $S_8$, a la puerta sur de la Meta:
+\begin{enumerate}
+  \item Todas las acciones en $S_8$ valen $0.00$ ($\max_a Q(S_8, a) = 0.00$). Elige moverse al \textbf{Este ($\rightarrow$)}.
+  \item ¡Aterriza en la Meta ($S_9$)! Recibe la recompensa masiva $R_4 = \mathbf{+10.0}$.
+  \item Como $S_9$ es el estado terminal, el valor futuro es estrictamente cero ($\max_{a'} Q(S_9, a') = 0$).
+  \item Calcula el Objetivo de Bellman:
+  \[
+    \text{Objetivo} = R_4 + \gamma (0) = \mathbf{+10.00}
+  \]
+  \item Calcula el Error TD:
+  \[
+    \delta = \text{Objetivo} - Q(S_8, \rightarrow) = +10.00 - 0.00 = \mathbf{+10.00}
+  \]
+  \item Actualiza la celda $Q(S_8, \rightarrow)$:
+  \[
+    Q_{\text{nuevo}}(S_8, \rightarrow) = 0.00 + 0.50 \times (+10.00) = \mathbf{+5.00}
+  \]
+\end{enumerate}
+
+Al finalizar el segundo episodio, la Tabla Q queda actualizada con las dos rutas simétricas descubiertas:
+
+\begin{center}
+\small
+\begin{tabular}{ccccc}
+  \toprule
+  \textbf{Estado (Casilla)} & \textbf{Norte ($\uparrow$)} & \textbf{Sur ($\downarrow$)} & \textbf{Este ($\rightarrow$)} & \textbf{Oeste ($\leftarrow$)} \\
+  \midrule
+  $S_1$ (Inicio)  & $0.00$ & $\mathbf{-0.50}$ & $-0.50$          & $0.00$ \\
+  $S_2$ (Pasillo) & $0.00$ & $0.00$          & $-0.50$          & $0.00$ \\
+  $S_3$ (Pasillo) & $0.00$ & $-0.50$         & $0.00$           & $0.00$ \\
+  $S_4$ (Pasillo) & $0.00$ & $\mathbf{-0.50}$ & $0.00$          & $0.00$ \\
+  $S_5$ (Muro)    & ---    & ---             & ---             & ---    \\
+  $S_6$ (Pasillo) & $0.00$ & $+5.00$         & $0.00$          & $0.00$ \\
+  $S_7$ (Pasillo) & $0.00$ & $0.00$          & $\mathbf{-0.50}$ & $0.00$ \\
+  $S_8$ (Pasillo) & $0.00$ & $0.00$          & $\mathbf{+5.00}$ & $0.00$ \\
+  $S_9$ (Meta)    & $0.00$ & $0.00$          & $0.00$           & $0.00$ \\
+  \bottomrule
+\end{tabular}
+\end{center}
+\textit{Interpretación del Episodio 2:} El robot descubrió la segunda ruta óptima hacia la meta. Ahora ambos accesos inmediatos a $S_9$ ($Q(S_6, \downarrow) = +5.00$ por el norte y $Q(S_8, \rightarrow) = +5.00$ por el sur) poseen valores positivos idénticos.
+
+\subsubsection*{Episodio 3: ¡La propagación de la recompensa hacia atrás!}
+En el tercer episodio, OptiBot vuelve a situarse en el Inicio ($S_1$). Ahora, las dos salidas exploradas están empatadas en la cima de las opciones viables ($Q(S_1, \rightarrow) = -0.50$ y $Q(S_1, \downarrow) = -0.50$). Al desempatar hacia el corredor superior (\textbf{Este}), observemos lo que ocurre en cada paso:
+
+\begin{enumerate}
+  \item \textbf{Paso 1 ($S_1 \to S_2$):} Se mueve al Este. Con $R_1 = -1.0$ y $\max_{a'} Q(S_2, a') = 0.00$:
+  \[
+    \delta = -1.00 - (-0.50) = -0.50 \implies Q_{\text{nuevo}}(S_1, \rightarrow) = -0.50 + 0.50(-0.50) = \mathbf{-0.75}
+  \]
+  \item \textbf{Paso 2 ($S_2 \to S_3$):} Avanza al Este. Con $R_2 = -1.0$ y $\max_{a'} Q(S_3, a') = 0.00$:
+  \[
+    \delta = -1.00 - (-0.50) = -0.50 \implies Q_{\text{nuevo}}(S_2, \rightarrow) = -0.50 + 0.50(-0.50) = \mathbf{-0.75}
+  \]
+  \item \textbf{Paso 3 ($S_3 \to S_6$, ¡El salto de valor!):} OptiBot está en $S_3$ y elige descender al \textbf{Sur ($\downarrow$)}. Aterriza en $S_6$ recibiendo $R_3 = -1.0$. 
+  
+  Al consultar la fila del estado destino $S_6$, ¡ocurre el fenómeno clave!: la casilla hacia el Sur ya tiene el valor positivo descubierto en el Episodio 1:
+  \[
+    \max_{a'} Q(S_6, a') = \max(0.00, \, \mathbf{+5.00}, \, 0.00, \, 0.00) = \mathbf{+5.00}
+  \]
+  El Objetivo de Bellman para $S_3$ se beneficia directamente de esta señal:
+  \[
+    \text{Objetivo} = R_3 + \gamma \max_{a'} Q(S_6, a') = -1.0 + (0.90 \times 5.00) = -1.0 + 4.50 = \mathbf{+3.50}
+  \]
+  El Error TD es intensamente positivo:
+  \[
+    \delta = \text{Objetivo} - Q(S_3, \downarrow) = +3.50 - (-0.50) = \mathbf{+4.00}
+  \]
+  Actualizamos la celda $Q(S_3, \downarrow)$:
+  \[
+    Q_{\text{nuevo}}(S_3, \downarrow) = -0.50 + 0.50 \times (+4.00) = -0.50 + 2.00 = \mathbf{+1.50}
+  \]
+  \item \textbf{Paso 4 ($S_6 \to S_9$, Consolidación en la Meta):} En $S_6$, la acción Sur vale $+5.00$ (la más alta). OptiBot avanza al Sur hacia la Meta $S_9$ recibiendo $R_4 = +10.0$:
+  \[
+    \text{Objetivo} = +10.0 + 0 = +10.00, \quad \delta = +10.00 - 5.00 = +5.00
+  \]
+  \[
+    Q_{\text{nuevo}}(S_6, \downarrow) = 5.00 + 0.50 \times (+5.00) = \mathbf{+7.50}
+  \]
+\end{enumerate}
+
+\pagebreak
+Al finalizar el tercer episodio, la Tabla Q refleja con claridad la propagación de la recompensa:
+
+\begin{center}
+\small
+\begin{tabular}{ccccc}
+  \toprule
+  \textbf{Estado (Casilla)} & \textbf{Norte ($\uparrow$)} & \textbf{Sur ($\downarrow$)} & \textbf{Este ($\rightarrow$)} & \textbf{Oeste ($\leftarrow$)} \\
+  \midrule
+  $S_1$ (Inicio)  & $0.00$ & $-0.50$          & $\mathbf{-0.75}$ & $0.00$ \\
+  $S_2$ (Pasillo) & $0.00$ & $0.00$          & $\mathbf{-0.75}$ & $0.00$ \\
+  $S_3$ (Pasillo) & $0.00$ & $\mathbf{+1.50}$ & $0.00$          & $0.00$ \\
+  $S_4$ (Pasillo) & $0.00$ & $-0.50$          & $0.00$          & $0.00$ \\
+  $S_5$ (Muro)    & ---    & ---             & ---             & ---    \\
+  $S_6$ (Pasillo) & $0.00$ & $\mathbf{+7.50}$ & $0.00$          & $0.00$ \\
+  $S_7$ (Pasillo) & $0.00$ & $0.00$          & $-0.50$          & $0.00$ \\
+  $S_8$ (Pasillo) & $0.00$ & $0.00$          & $+5.00$          & $0.00$ \\
+  $S_9$ (Meta)    & $0.00$ & $0.00$          & $0.00$          & $0.00$ \\
+  \bottomrule
+\end{tabular}
+\end{center}
+\textit{Nota explicativa:} Se observa con precisión matemática cómo la recompensa retrocede casilla por casilla: la antesala de la meta ($S_6, \downarrow$) sube a $+7.50$ y la casilla previa ($S_3, \downarrow$) salta por primera vez a un valor fuertemente positivo ($+1.50$).
 \end{calculomanual}
 
 \begin{ideaclave}
-\textbf{La intuición de las migajas de pan:}
-Nótese el fenómeno que acaba de ocurrir: la recompensa positiva de la Meta ($+10$) se ha propagado hacia atrás. Primero iluminó la casilla vecina $S_6$ con $+5.00$, y en el siguiente turno iluminó la casilla $S_3$ con $+1.50$. 
-
-A medida que el robot explora el laberinto a lo largo de varios episodios, esta ola de valor retrocede casilla por casilla hasta llegar a la casilla de Inicio ($S_1$), dejando un rastro continuo de flechas con valores altos que guían a OptiBot directamente a la meta por la ruta óptima.
+\textbf{La intuición de las migajas de pan y el optimismo ante la incertidumbre:}
+Este proceso ilustra dos pilares esenciales de Q-Learning:
+\begin{enumerate}
+  \item \textbf{Exploración por optimismo inicial:} En el Episodio 2, el robot no repitió a ciegas la ruta norte porque su penalización la redujo a $-0.50$, mientras que las opciones no visitadas ofrecían $0.00$. Esto empujó al agente a descubrir la ruta alternativa sur.
+  \item \textbf{Propagación hacia atrás de la recompensa:} La señal masiva de la Meta ($+10$) retrocede un paso en cada recorrido completo. Primero iluminó la casilla vecina $S_6$ con $+5.00$, y en la siguiente visita iluminó la casilla previa $S_3$ con $+1.50$. Conforme avanzan los episodios, esta ola positiva llega a la casilla inicial ($S_1$), consolidando la política óptima.
+\end{enumerate}
 \end{ideaclave}
+
+\section{Evolución a Largo Plazo: Cómo los Ceros se Transforman en Valores Negativos}
+Si las acciones transitables acumulan penalizaciones iniciales ($-0.50, -0.75$), ¿por qué el robot no prefiere indefinidamente las acciones que aún valen $0.00$?
+
+La respuesta es que esos ceros reflejan únicamente falta de experiencia. Conforme el agente explora en episodios sucesivos ($\varepsilon \approx 1.0$), descubre rápidamente el costo real de las malas decisiones:
+
+\begin{enumerate}
+  \item \textbf{Salirse del laberinto (Game Over):} Al intentar cruzar los bordes perimetrales de la cuadrícula, el agente recibe una penalización inmediata de $R = -10.0$ y el episodio concluye (\textit{Game Over}). Al ser un estado terminal sin futuro ($\max_{a'} Q = 0$), la regla de actualización reduce drásticamente su valor:
+  \[
+    Q(s, a) \leftarrow Q(s, a) + \alpha \Big[ -10.0 + \gamma(0) - Q(s, a) \Big]
+  \]
+  En la primera visita con $\alpha = 0.50$, la celda cae de $0.00$ a $\mathbf{-5.00}$, y en pocas iteraciones converge a $\mathbf{-10.00}$. Los ceros engañosos de los bordes se transforman así en valores fuertemente negativos.
+
+  \item \textbf{Chocar contra el muro central ($S_5$):} Intentar ingresar en la estantería bloqueada hace rebotar al robot en su misma casilla, sumando penalizaciones de paso ($R = -1.0$) sin acercarlo a la meta.
+\end{enumerate}
+
+\subsection{El auge de los pasillos interiores: Descubrimiento de dos rutas óptimas}
+Mientras que las salidas prohibidas caen al fondo de la escala ($\approx -10.00$), los pasillos transitables experimentan el efecto contrario: aunque cada movimiento descuenta $-1.00$, están conectados a la enorme recompensa de $+10.0$ de la Meta ($S_9$). 
+
+A medida que el robot completa cientos de episodios, la recompensa positiva retrocede paso a paso hasta alcanzar el punto de partida ($S_1$). Al converger el entrenamiento, la Tabla Q queda completamente estructurada:
+
+\begin{center}
+\small
+\begin{tabular}{ccccc}
+  \toprule
+  \textbf{Estado (Casilla)} & \textbf{Norte ($\uparrow$)} & \textbf{Sur ($\downarrow$)} & \textbf{Este ($\rightarrow$)} & \textbf{Oeste ($\leftarrow$)} \\
+  \midrule
+  $S_1$ (Inicio)  & $-10.00$ & $\mathbf{+4.58}$ & $\mathbf{+4.58}$ & $-10.00$ \\
+  $S_2$ (Pasillo) & $-10.00$ & $+4.58$          & $\mathbf{+6.20}$ & $+3.12$  \\
+  $S_3$ (Pasillo) & $-10.00$ & $\mathbf{+8.00}$ & $-10.00$         & $+4.58$  \\
+  $S_4$ (Pasillo) & $+3.12$  & $\mathbf{+6.20}$ & $+4.58$          & $-10.00$ \\
+  $S_5$ (Muro)    & ---      & ---             & ---              & ---      \\
+  $S_6$ (Pasillo) & $+6.20$  & $\mathbf{+10.00}$ & $-10.00$        & $+8.00$  \\
+  $S_7$ (Pasillo) & $+4.58$  & $-10.00$         & $\mathbf{+8.00}$ & $-10.00$ \\
+  $S_8$ (Pasillo) & $+8.00$  & $-10.00$         & $\mathbf{+10.00}$ & $+6.20$  \\
+  $S_9$ (Meta)    & $0.00$   & $0.00$           & $0.00$           & $0.00$   \\
+  \bottomrule
+\end{tabular}
+\end{center}
+\textit{Interpretación de la convergencia final:}
+\begin{itemize}
+  \item Las acciones que intentan abandonar el laberinto se han fijado en $\mathbf{-10.00}$, por lo que una política codiciosa jamás las seleccionará.
+  \item En el inicio ($S_1$), el agente descubre que existen \textbf{dos caminos óptimos y simétricos} de 4 pasos con el mismo valor óptimo ($Q^* = +4.58$):
+  \begin{itemize}
+    \item \textbf{Camino Superior:} $S_1 \xrightarrow{\text{Este}} S_2 \xrightarrow{\text{Este}} S_3 \xrightarrow{\text{Sur}} S_6 \xrightarrow{\text{Sur}} S_9$.
+    \item \textbf{Camino Inferior:} $S_1 \xrightarrow{\text{Sur}} S_4 \xrightarrow{\text{Sur}} S_7 \xrightarrow{\text{Este}} S_8 \xrightarrow{\text{Este}} S_9$.
+  \end{itemize}
+\end{itemize}
 
 \section{Visualización Gráfica: La Política Aprendida en la Cuadrícula}
 Una vez que el algoritmo converge, ¿cómo se interpreta la Tabla Q en el espacio físico del almacén? 
@@ -370,136 +615,18 @@ Para cada casilla $s$, simplemente dibujamos una flecha apuntando hacia la acci�
 \end{figure}
 
 \section{Implementación en Python: El Laberinto de OptiBot}
-A continuación se presenta el código completo en Python que implementa el entorno de la cuadrícula de $3 \times 3$ y entrena a OptiBot con Q-Learning:
-
-\begin{lstlisting}[style=rlcode]
-import numpy as np
-
-class LaberintoOptiBot:
-    """
-    Cuadricula 3x3 del almacen:
-      S1(0) S2(1) S3(2)
-      S4(3) S5(4:Muro) S6(5)
-      S7(6) S8(7) S9(8:Meta)
-    Acciones: 0: Norte (Arriba), 1: Sur (Abajo), 2: Este (Derecha), 3: Oeste (Izquierda)
-    """
-    def __init__(self):
-        self.n_estados = 9
-        self.n_acciones = 4
-        self.muro = 4       # S5 esta bloqueado
-        self.meta = 8       # S9 es la meta
-        self.estado = 0     # Inicia en S1
-
-    def reset(self):
-        self.estado = 0
-        return self.estado
-
-    def step(self, accion):
-        r, c = divmod(self.estado, 3)
-        nr, nc = r, c
-
-        if accion == 0 and r > 0:    # Norte
-            nr -= 1
-        elif accion == 1 and r < 2:  # Sur
-            nr += 1
-        elif accion == 2 and c < 2:  # Este
-            nr += 1
-        elif accion == 3 and c > 0:  # Oeste
-            nc -= 1
-
-        s_sig = nr * 3 + nc
-        # Si choca contra el muro central, rebota y no se mueve
-        if s_sig == self.muro:
-            s_sig = self.estado
-
-        # Evaluacion de recompensas
-        if s_sig == self.meta:
-            recompensa = 10.0
-            done = True
-        else:
-            recompensa = -1.0
-            done = False
-
-        self.estado = s_sig
-        return s_sig, recompensa, done
-
-
-class AgenteQLearning:
-    def __init__(self, n_estados=9, n_acciones=4, alfa=0.20, gamma=0.90, epsilon=1.0):
-        self.Q = np.zeros((n_estados, n_acciones))
-        self.alfa = alfa
-        self.gamma = gamma
-        self.epsilon = epsilon
-        self.eps_min = 0.05
-        self.decaimiento = 0.995
-
-    def elegir_accion(self, s):
-        # Exploracion vs Explotacion
-        if np.random.rand() < self.epsilon:
-            return np.random.randint(4)
-        return int(np.argmax(self.Q[s]))
-
-    def actualizar(self, s, a, r, s_sig, done):
-        # Regla de Watkins
-        q_futuro = 0.0 if done else np.max(self.Q[s_sig])
-        objetivo_td = r + self.gamma * q_futuro
-        error_td = objetivo_td - self.Q[s, a]
-        self.Q[s, a] += self.alfa * error_td
-
-    def decaer_epsilon(self):
-        self.epsilon = max(self.eps_min, self.epsilon * self.decaimiento)
-
-
-# ============================================================
-# Entrenamiento de OptiBot en el Laberinto
-# ============================================================
-np.random.seed(42)
-env = LaberintoOptiBot()
-agente = AgenteQLearning()
-
-for ep in range(1, 1501):
-    s = env.reset()
-    done = False
-    pasos = 0
-    while not done and pasos < 50:
-        a = agente.elegir_accion(s)
-        s_sig, r, done = env.step(a)
-        agente.actualizar(s, a, r, s_sig, done)
-        s = s_sig
-        pasos += 1
-    agente.decaer_epsilon()
-
-simbolos = {0: "^", 1: "v", 2: ">", 3: "<"}
-print("=== POLITICA OPTIMA APRENDIDA POR OPTIBOT ===")
-for r in range(3):
-    fila_str = ""
-    for c in range(3):
-        s = r * 3 + c
-        if s == env.meta:
-            fila_str += "[ META ] "
-        elif s == env.muro:
-            fila_str += "[ MURO ] "
-        else:
-            mejor_a = np.argmax(agente.Q[s])
-            fila_str += f"[  {simbolos[mejor_a]}   ] "
-    print(fila_str)
-\end{lstlisting}
-
-Al ejecutar el código, la terminal muestra la política visual aprendida en la cuadrícula:
-\begin{lstlisting}[style=rlcode]
-=== POLITICA OPTIMA APRENDIDA POR OPTIBOT ===
-[  >   ] [  >   ] [  v   ] 
-[  v   ] [ MURO ] [  v   ] 
-[  >   ] [  >   ] [ META ] 
-\end{lstlisting}
-¡El robot ha aprendido a bordear el muro tanto por arriba como por abajo para enfilarse directamente hacia la meta en el mínimo número de pasos!
+Para experimentar de forma interactiva con el entorno de simulación y el algoritmo tabular de Q-Learning, el código completo se encuentra disponible en el cuaderno Jupyter:
+\begin{center}
+  \textbf{\texttt{notebooks/cap04\_rl\_tradicional.ipynb}}
+\end{center}
+En este cuaderno interactivo se implementa la clase modular \texttt{LaberintoOptiBot} con la cuadrícula de $3 \times 3$, penalizaciones de frontera ($-10.0$ con \textit{Game Over}) y recompensa por meta ($+10.0$). Asimismo, se programa el agente tabular \texttt{AgenteQLearning} con decaimiento de exploración $\varepsilon$, visualizando en tiempo real la convergencia de la tabla $Q$, las curvas de recompensa acumulada y la política direccional aprendida que conduce a la meta bordeando el obstáculo central por ambas rutas simétricas.
 
 \section{La Gran Limitación: La Maldición de la Dimensionalidad}
 La cuadrícula de $3 \times 3$ tiene apenas $9$ estados y $4$ acciones, por lo que la Tabla Q cabe cómodamente en cualquier hoja de cálculo con $36$ celdas.
 
 Sin embargo, ¿qué ocurriría si OptiBot saliera de la cuadrícula discreta de juguete y operara en un almacén real con sensores continuos?
 \begin{enumerate}
-  \item \textbf{Sensores continuos:} Un sensor LiDAR mide distancias con infinitos decimales ($d \in [0.05, 15.0]\text{ m}$), su velocímetro mide velocidades reales ($v \in [0.0, 2.5]\text{ m/s}$) y su batería decrece de forma continua ($b \in [0.0, 100.0]\%$).
+  \item \textbf{Sensores continuos:} Un sensor mide distancias con infinitos decimales ($d \in [0.05, 15.0]\text{ m}$), su velocímetro mide velocidades reales ($v \in [0.0, 2.5]\text{ m/s}$) y su batería decrece de forma continua ($b \in [0.0, 100.0]\%$).
   \item \textbf{Espacio infinito de estados:} El número de combinaciones posibles en un entorno continuo es literalmente \textbf{infinito} ($|\mathcal{S}| = \infty$).
   \item \textbf{El límite de las tablas:} No existe memoria RAM en el planeta que pueda almacenar una tabla de infinitas filas. Más aún, un robot jamás visitaría cada milímetro del espacio las veces requeridas para que cada celda aprenda.
 \end{enumerate}

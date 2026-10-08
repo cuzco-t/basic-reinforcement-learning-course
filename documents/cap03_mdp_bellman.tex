@@ -420,97 +420,12 @@ A diferencia de un modelo con incentivos mal calibrados, este resultado tiene un
   \item \textbf{Evolución decreciente hacia la meta ($2.71 \to 1.90 \to 0.97 \to 0$):} El valor de cada estado representa el \textbf{retorno restante esperado} hasta culminar el turno. Cuanto más cerca está el robot de completar la entrega, menos etapas le quedan por recorrer y menor es el retorno futuro acumulable, alcanzando exactamente cero en el estado terminal Fin.
 \end{enumerate}
 
-\section{Implementación en Python}
-El siguiente script en Python implementa el algoritmo completo de evaluación iterativa para OptiBot, calcula la convergencia y extrae de forma automática la política óptima $\pi^*$:
-
-\begin{lstlisting}[style=rlcode]
-import numpy as np
-
-# 1. Definicion del MDP de OptiBot
-estados = ["Muelle", "Pasillo", "Entrega", "Fin"]
-num_estados = 3  # Estados activos (Fin es terminal con V=0)
-gamma = 0.90
-theta = 0.01
-
-# Tabla de transiciones: [origen, accion, destino, recompensa, probabilidad]
-transiciones = [
-    # Muelle (S1)
-    (0, "Carga Estandar", 1,  1.00, 1.00),
-    (0, "Linea Rapida",   2,  0.10, 1.00),
-    # Pasillo (S2)
-    (1, "Modo Eco",       1,  0.30, 0.20),
-    (1, "Modo Eco",       2,  1.00, 0.80),
-    (1, "Modo Normal",    1,  0.50, 0.70),
-    (1, "Modo Normal",    2,  0.30, 0.30),
-    # Entrega (S3)
-    (2, "Descarga Manual",3,  1.00, 0.85),
-    (2, "Descarga Manual",1, -1.00, 0.15),
-    (2, "Descarga Auto",  3,  1.00, 0.90),
-    (2, "Descarga Auto",  1, -1.00, 0.10),
-]
-
-# 2. Inicializacion de funciones de valor: V(s) = 0
-V = np.zeros(4) # V[3] corresponde al estado terminal 'Fin' = 0
-
-# 3. Bucle de Evaluacion Iterativa / Value Iteration
-iteracion = 0
-while True:
-    delta = 0.0
-    iteracion += 1
-    V_nuevo = V.copy()
-    
-    # Evaluar cada estado activo
-    for s in range(num_estados):
-        v_anterior = V[s]
-        # Identificar acciones disponibles en el estado s
-        acciones_s = sorted(list(set(a for s_orig, a, _, _, _ in transiciones if s_orig == s)))
-        q_valores = []
-        
-        for accion in acciones_s:
-            # Calcular suma de p * [r + gamma * V(s')]
-            suma_q = sum(p * (r + gamma * V[dest]) 
-                         for s_orig, a, dest, r, p in transiciones 
-                         if s_orig == s and a == accion)
-            q_valores.append(suma_q)
-            
-        V_nuevo[s] = max(q_valores)
-        delta = max(delta, abs(v_anterior - V_nuevo[s]))
-        
-    V = V_nuevo
-    if delta < theta:
-        break
-
-# 4. Extraccion de la Politica Optima pi*(s)
-politica_optima = {}
-for s in range(num_estados):
-    acciones_s = sorted(list(set(a for s_orig, a, _, _, _ in transiciones if s_orig == s)))
-    mejor_q = -np.inf
-    mejor_accion = None
-    for accion in acciones_s:
-        suma_q = sum(p * (r + gamma * V[dest]) 
-                     for s_orig, a, dest, r, p in transiciones 
-                     if s_orig == s and a == accion)
-        if suma_q > mejor_q:
-            mejor_q = suma_q
-            mejor_accion = accion
-    politica_optima[estados[s]] = (mejor_accion, mejor_q)
-
-# 5. Visualizacion de resultados
-print(f"=== CONVERGENCIA ALCANZADA EN {iteracion} ITERACIONES (theta = {theta}) ===")
-for estado, (accion, valor) in politica_optima.items():
-    print(f"  Estado {estado:8s} -> Accion Optima: {accion:18s} | V*(s) = {valor:.4f}")
-\end{lstlisting}
-
-\subsection*{Salida del Programa e Interpretación}
-Al ejecutar el código, la terminal entrega el siguiente reporte verificado:
-\begin{lstlisting}[style=rlcode]
-=== CONVERGENCIA ALCANZADA EN 7 ITERACIONES (theta = 0.01) ===
-  Estado Muelle   -> Accion Optima: Carga Estandar   | V*(s) = 2.7095
-  Estado Pasillo  -> Accion Optima: Modo Eco         | V*(s) = 1.9008
-  Estado Entrega  -> Accion Optima: Descarga Auto    | V*(s) = 0.9710
-\end{lstlisting}
-
-Los resultados del algoritmo computacional reproducen con precisión exacta los cálculos manuales derivados en las tablas precedentes, confirmando que la política óptima para OptiBot consiste en preparar los pedidos con Carga Estándar, navegar el almacén en Modo Eco y completar la descarga mediante el sistema Automático.
+\section{Implementación en Python: Iteración de Valor y Ecuaciones de Bellman}
+Para experimentar de forma interactiva con la resolución del MDP de OptiBot y el algoritmo de Iteración de Valor (\textit{Value Iteration}), el código completo se encuentra disponible en el cuaderno Jupyter:
+\begin{center}
+  \textbf{\texttt{notebooks/cap03\_mdp\_bellman.ipynb}}
+\end{center}
+En este cuaderno interactivo se definen las funciones de transición y recompensa esperada del almacén, se implementa el bucle de convergencia de Bellman iterando hasta satisfacer el umbral de tolerancia $\theta = 0.01$, y se extrae automáticamente la política óptima $\pi^*(s)$. El algoritmo converge en 7 iteraciones reproduciendo con exactitud los valores calculados teóricamente: $V^*(S_1) = 2.7095$, $V^*(S_2) = 1.9008$ y $V^*(S_3) = 0.9710$, confirmando que la política óptima consiste en utilizar Carga Estándar en el muelle, Modo Eco en el pasillo y Descarga Automática en la bahía de entrega.
 
 \begin{notabox}
 \textbf{El puente hacia el siguiente capítulo:} En este capítulo hemos definido rigurosamente qué es un Proceso de Decisión de Markov y cómo evaluar sus funciones de valor mediante las Ecuaciones de Bellman bajo el supuesto de conocer el modelo analítico del entorno. En el Capítulo~\ref{cap:rl_tradicional}, abordaremos el desafío fundamental del \textbf{Aprendizaje por Refuerzo Tradicional}: ¿cómo puede OptiBot aprender la política óptima sin disponer de planos ni modelos analíticos de probabilidad? Introduciremos el aprendizaje libre de modelo mediante Diferencia Temporal y deduciremos en detalle el algoritmo fundamental \textbf{Q-Learning}.

@@ -2,7 +2,6 @@
 *.out
 *.toc
 *.aux
-*.pdf
 *.fls
 *.fdb_latexmk
 *.gz

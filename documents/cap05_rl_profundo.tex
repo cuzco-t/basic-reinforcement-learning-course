@@ -201,119 +201,12 @@ Para erradicar este problema, Hado van Hasselt et al. (2016) introdujeron **Doub
 \end{itemize}
 Si una acción fue sobreestimada por azar en la red target, es improbable que la red online coincida en seleccionarla, cancelando de raíz el sesgo positivo sistemático.
 
-\section{Implementación Modular Completa en PyTorch: OptiBot DQN}
-A continuación se detalla la implementación en Python utilizando PyTorch, estructurada de manera modular para robótica móvil:
-
-\begin{lstlisting}[style=rlcode]
-import torch
-import torch.nn as nn
-import torch.optim as optim
-import numpy as np
-import random
-from collections import deque
-
-# ============================================================
-# 1. Arquitectura de la Red Q Profunda
-# ============================================================
-class RedQOptiBot(nn.Module):
-    def __init__(self, dim_estado=4, n_acciones=4):
-        super().__init__()
-        self.red = nn.Sequential(
-            nn.Linear(dim_estado, 64),
-            nn.ReLU(),
-            nn.Linear(64, 64),
-            nn.ReLU(),
-            nn.Linear(64, n_acciones)
-        )
-
-    def forward(self, x):
-        return self.red(x)
-
-
-# ============================================================
-# 2. Buffer de Repeticion de Experiencias (Experience Replay)
-# ============================================================
-class BufferReplay:
-    def __init__(self, capacidad=50000):
-        self.memoria = deque(maxlen=capacidad)
-
-    def guardar(self, s, a, r, s_sig, terminado):
-        self.memoria.append((s, a, r, s_sig, float(terminado)))
-
-    def muestrear_lote(self, batch_size=32):
-        lote = random.sample(self.memoria, batch_size)
-        s, a, r, s_sig, d = zip(*lote)
-        
-        # Conversion eficiente a tensores de PyTorch
-        return (torch.FloatTensor(np.array(s)),
-                torch.LongTensor(a).unsqueeze(1),
-                torch.FloatTensor(r).unsqueeze(1),
-                torch.FloatTensor(np.array(s_sig)),
-                torch.FloatTensor(d).unsqueeze(1))
-
-    def __len__(self):
-        return len(self.memoria)
-
-
-# ============================================================
-# 3. Agente Deep Q-Network (Double DQN)
-# ============================================================
-class AgenteDQN:
-    def __init__(self, dim_estado=4, n_acciones=4, lr=1e-3, gamma=0.99, tau=0.005):
-        self.n_acciones = n_acciones
-        self.gamma = gamma
-        self.tau = tau
-        self.epsilon = 1.0
-        self.eps_min = 0.02
-        self.decaimiento = 0.995
-
-        # Red Online y Red Target
-        self.red_online = RedQOptiBot(dim_estado, n_acciones)
-        self.red_target = RedQOptiBot(dim_estado, n_acciones)
-        self.red_target.load_state_dict(self.red_online.state_dict())
-
-        self.optimizador = optim.Adam(self.red_online.parameters(), lr=lr)
-        self.criterio_perdida = nn.SmoothL1Loss()  # Perdida de Huber
-
-    def seleccionar_accion(self, estado):
-        # Exploracion vs Explotacion (epsilon-greedy)
-        if np.random.rand() < self.epsilon:
-            return np.random.randint(self.n_acciones)
-        
-        with torch.no_grad():
-            s_tensor = torch.FloatTensor(estado).unsqueeze(0)
-            valores_q = self.red_online(s_tensor)
-            return int(valores_q.argmax(dim=1).item())
-
-    def aprender_de_lote(self, buffer, batch_size=32):
-        if len(buffer) < batch_size:
-            return 0.0
-
-        estados, acciones, recompensas, estados_sig, terminados = buffer.muestrear_lote(batch_size)
-
-        with torch.no_grad():
-            # Double DQN: seleccion con red online, evaluacion con red target
-            mejores_acciones = self.red_online(estados_sig).argmax(dim=1, keepdim=True)
-            q_futuro = self.red_target(estados_sig).gather(1, mejores_acciones)
-            objetivos = recompensas + self.gamma * (1.0 - terminados) * q_futuro
-
-        # Prediccion de la red online para las acciones efectivamente tomadas
-        q_predichos = self.red_online(estados).gather(1, acciones)
-
-        # Calculo de perdida y retropropagacion
-        perdida = self.criterio_perdida(q_predichos, objetivos)
-        self.optimizador.zero_grad()
-        perdida.backward()
-        self.optimizador.step()
-
-        # Actualizacion suave de la red target (Polyak soft-update)
-        for p_t, p_o in zip(self.red_target.parameters(), self.red_online.parameters()):
-            p_t.data.copy_(self.tau * p_o.data + (1.0 - self.tau) * p_t.data)
-
-        # Reduccion progresiva de epsilon
-        self.epsilon = max(self.eps_min, self.epsilon * self.decaimiento)
-        return perdida.item()
-\end{lstlisting}
+\section{Implementación Modular en PyTorch: OptiBot DQN}
+Para experimentar de forma interactiva con el entrenamiento de redes neuronales profundas para control por refuerzo, el código completo se encuentra disponible en el cuaderno Jupyter:
+\begin{center}
+  \textbf{\texttt{notebooks/cap05\_rl\_profundo.ipynb}}
+\end{center}
+En este cuaderno interactivo se implementa la arquitectura modular en PyTorch: la red neuronal de aproximación de valor \texttt{RedQOptiBot}, el búfer de repetición de experiencias \texttt{BufferReplay} (descorrelación de muestras temporales) y el agente \texttt{AgenteDQN} integrando \textit{Double DQN} y actualización suave de pesos (\textit{Polyak averaging} con parámetro $\tau$). El cuaderno incluye bucles de entrenamiento en entornos continuos, seguimiento de la pérdida de Huber y curvas de convergencia del retorno acumulado.
 
 \section{Comparativa Global: De las Tablas a las Redes Neuronales}
 La Tabla~\ref{tab:comparativa_rl} resume la transición paradigmática recorrida a lo largo de este curso, contrastando las dos grandes eras del Aprendizaje por Refuerzo:

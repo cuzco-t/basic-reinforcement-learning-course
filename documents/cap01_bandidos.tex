@@ -149,46 +149,12 @@ Veamos cómo actualiza OptiBot sus estimaciones en sus tres primeros despachos, 
 \noindent \textbf{Resultado:} La memoria del robot queda en $Q = [3.00, \, 4.80, \, 0.00, \, 0.00]$. OptiBot seguirá explotando preferentemente al Proveedor B (por tener el valor más alto, $4.80$), pero el mecanismo $\varepsilon$ le permitirá explorar oportunamente a C y D.
 \end{calculomanual}
 
-\section{Implementación en Python}
-A continuación se detalla la implementación completa del algoritmo de bandidos multi-brazo en Python:
-
-\begin{lstlisting}[style=rlcode]
-import numpy as np
-
-class BandidoAlmacen:
-    def __init__(self, k=4, epsilon=0.10):
-        self.k = k
-        self.epsilon = epsilon
-        # Valores objetivos subyacentes del entorno
-        self.q_real = np.array([3.2, 4.8, 2.1, 4.1])
-        self.Q = np.zeros(k) # Vector de estimaciones iniciales
-        self.N = np.zeros(k) # Vector de frecuencias de seleccion
-
-    def seleccionar_accion(self):
-        # Seleccion epsilon-greedy
-        if np.random.rand() < self.epsilon:
-            return np.random.randint(self.k) # Exploracion uniforme
-        return np.argmax(self.Q)              # Explotacion codiciosa
-
-    def ejecutar_paso(self, accion):
-        # Simulacion de respuesta estocastica con ruido gaussiano
-        recompensa = np.random.normal(loc=self.q_real[accion], scale=1.0)
-        self.N[accion] += 1
-        # Actualizacion mediante la regla incremental
-        error = recompensa - self.Q[accion]
-        self.Q[accion] += (1.0 / self.N[accion]) * error
-        return recompensa
-
-# Simulacion de 2,000 despachos en el almacen
-robot = BandidoAlmacen(k=4, epsilon=0.10)
-for t in range(2000):
-    a = robot.seleccionar_accion()
-    r = robot.ejecutar_paso(a)
-
-print("Valores Reales Subyacentes:", robot.q_real)
-print("Estimaciones Aprendidas:   ", np.round(robot.Q, 2))
-print("Frecuencia de Seleccion:   ", robot.N)
-\end{lstlisting}
+\section{Implementación en Python: El Experimento de las Cuatro Tolvas}
+Para experimentar de forma interactiva con el algoritmo de bandidos multi-brazo y la regla $\varepsilon$-greedy, el código completo se encuentra disponible en el cuaderno Jupyter:
+\begin{center}
+  \textbf{\texttt{notebooks/cap01\_bandidos.ipynb}}
+\end{center}
+En este cuaderno se implementa la clase \texttt{BandidoAlmacen}, se simulan $2{,}000$ despachos de paquetes en el almacén y se visualizan gráficas comparativas entre los valores reales subyacentes $q^*(a)$ y las estimaciones aprendidas $Q(a)$, así como la frecuencia con la que OptiBot explota la mejor tolva frente a las exploraciones aleatorias.
 
 \begin{notabox}
 El modelo de bandidos multi-brazo permite formalizar con rigor el dilema entre exploración y explotación. No obstante, presenta una limitación estructural clave: \textbf{las acciones del agente no alteran el estado del entorno}. 

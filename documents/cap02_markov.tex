@@ -414,49 +414,12 @@ Comprobemos que nuestro vector $\pi^* = [0.250, \, 0.125, \, 0.625]$ satisface e
 \paragraph{Conclusión para el sistema de OptiBot:}
 Si dejamos que el almacén funcione en piloto automático sin una estrategia inteligente de mantenimiento, la cinta transportadora pasará un alarmante \textbf{$62.5\%$ del tiempo fuera de servicio por averías}. Este resultado matemático demuestra con total claridad por qué necesitamos agentes inteligentes: OptiBot no puede limitarse a observar cómo se rompen las máquinas; debe aprender a \textbf{tomar acciones óptimas} en cada estado para maximizar la productividad.
 
-\section{Implementación en Python}
-A continuación se presenta el código completo en Python que calcula las proyecciones a corto plazo, demuestra la convergencia de la matriz mediante multiplicaciones sucesivas ($P^k$) y resuelve analíticamente la distribución estacionaria mediante autovectores con NumPy:
-
-\begin{lstlisting}[style=rlcode]
-import numpy as np
-
-# 1. Definicion de la matriz estocastica de transicion P
-P = np.array([
-    [0.70, 0.20, 0.10],  # Fila 1: Nuevo (N)
-    [0.10, 0.60, 0.30],  # Fila 2: Desgastado (D)
-    [0.10, 0.00, 0.90]   # Fila 3: Averiado (A)
-])
-
-# 2. Proyeccion temporal a corto plazo (t=1 y t=2) partiendo de pieza Nueva
-mu_0 = np.array([1.0, 0.0, 0.0])
-mu_1 = mu_0 @ P
-mu_2 = mu_0 @ np.linalg.matrix_power(P, 2)
-
-print("=== PROYECCION A CORTO PLAZO ===")
-print("Distribucion en t=1 (mu_1):", np.round(mu_1, 3))
-print("Distribucion en t=2 (mu_2):", np.round(mu_2, 3))
-print(f"Probabilidad de averia en t=2: {mu_2[2]*100:.1f}%\n")
-
-# 3. Convergencia multiplicando la matriz por si misma muchas veces (P^k)
-print("=== CONVERGENCIA POR MULTIPLICACION MATRICIAL SUCESIVA ===")
-for k in [1, 2, 5, 10, 50]:
-    Pk = np.linalg.matrix_power(P, k)
-    print(f"Matriz P^{k}:")
-    print(np.round(Pk, 4))
-    print()
-
-# 4. Resolucion algebraica exacta mediante autovectores (pi * P = pi)
-# En algebra lineal, pi * P = pi equivale a P.T * pi.T = pi.T (autovalor lambda = 1)
-evals, evecs = np.linalg.eig(P.T)
-idx = np.argmin(np.abs(evals - 1.0))
-pi_star = np.real(evecs[:, idx])
-pi_star = pi_star / np.sum(pi_star)  # Normalizamos para que sume 1.0
-
-estados = ["Nuevo (N)", "Desgastado (D)", "Averiado (A)"]
-print("=== DISTRIBUCION ESTACIONARIA ASINTOTICA (pi*) ===")
-for st, prob in zip(estados, pi_star):
-    print(f"  {st:16s}: {prob*100:6.2f}% del tiempo total")
-\end{lstlisting}
+\section{Implementación en Python: Proyección y Distribución Estacionaria}
+Para experimentar de forma interactiva con el cálculo de cadenas de Markov, proyecciones temporales y cálculo de la distribución estacionaria mediante álgebra matricial, el código completo se encuentra disponible en el cuaderno Jupyter:
+\begin{center}
+  \textbf{\texttt{notebooks/cap02\_markov.ipynb}}
+\end{center}
+En este cuaderno interactivo se definen las matrices estocásticas de transición con NumPy, se proyecta la evolución del estado de las cintas transportadoras a corto plazo ($t=1, t=2$), se ilustra la convergencia asintótica mediante potencias matriciales sucesivas ($P^k$) y se calcula de forma exacta la distribución estacionaria ($\pi^*$) utilizando descomposición en autovectores y autovalores.
 
 \begin{notabox}
 Las Cadenas de Markov nos permiten describir y predecir cómo cambia un entorno estocástico con el tiempo. Sin embargo, en este modelo el agente es un simple espectador pasivo: las probabilidades ocurren por sí solas y no hay posibilidad de intervenir.

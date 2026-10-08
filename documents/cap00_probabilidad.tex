@@ -155,33 +155,11 @@ Una duda natural es: ¿realmente se cumple este promedio teórico cuando el sist
 
 La \textbf{Ley de los Grandes Números} responde afirmativamente: a medida que un experimento se repite una gran cantidad de veces, la media observada en la realidad se aproxima de manera casi perfecta al valor esperado teórico calculado en el papel.
 
-El siguiente programa en Python simula el trabajo de OptiBot realizando 50,000 despachos en el almacén para verificar experimentalmente si el promedio empírico coincide con los $\$4.62$ calculados a mano:
-
-\begin{lstlisting}[style=rlcode]
-import numpy as np
-
-# 1. Definicion de los resultados posibles y sus probabilidades
-ganancias = np.array([10.0, 5.0, -2.0])
-probabilidades = np.array([0.26, 0.50, 0.24])
-
-# 2. Computo del valor esperado teorico
-E_teorico = np.sum(ganancias * probabilidades)
-print(f"Valor Esperado Teorico: ${E_teorico:.2f}")
-
-# 3. Simulacion de 50,000 despachos realizados por OptiBot
-np.random.seed(42)
-despachos = np.random.choice(ganancias, size=50000, p=probabilidades)
-
-# 4. Promedio real obtenido a partir de la simulacion
-promedio_observado = np.mean(despachos)
-print(f"Promedio Real Observado (50,000 entregas): ${promedio_observado:.2f}")
-
-# 5. Comparacion entre la prediccion teorica y el resultado practico
-diferencia = abs(E_teorico - promedio_observado)
-print(f"Diferencia absoluta: ${diferencia:.4f}")
-\end{lstlisting}
-
-Al ejecutar la simulación, se comprueba que el promedio observado difiere del valor teórico por menos de dos centavos de dólar. Si agrega un cero al número de iteraciones de la simulación, la diferencia será mucho menor y el valor teórico sera prácticamente igual al valor observado.
+Para experimentar de forma interactiva con esta simulación, el código completo se encuentra disponible en el cuaderno Jupyter:
+\begin{center}
+  \textbf{\texttt{notebooks/cap00\_probabilidad.ipynb}}
+\end{center}
+En este cuaderno interactivo se simula el trabajo de OptiBot realizando $50{,}000$ despachos en el almacén y se grafica la convergencia del promedio acumulado en tiempo real. Al ejecutar la simulación, se comprueba que el promedio observado difiere del valor teórico por menos de dos centavos de dólar ($\approx \$4.62$), validando empíricamente la teoría.
 
 \begin{notabox}
 Con esta base conceptual, el azar deja de ser un obstáculo desconcertante y se transforma en una variable cuantificable y predecible a gran escala. En el Capítulo~\ref{cap:bandidos}, estas herramientas permitirán analizar el primer problema clásico del aprendizaje por refuerzo: cómo debe actuar un agente inteligente ante el dilema entre \textbf{explotar} una opción que ya sabe que funciona o \textbf{explorar} nuevas alternativas para descubrir si ofrecen ganancias superiores.

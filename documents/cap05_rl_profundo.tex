@@ -5,228 +5,739 @@
 \label{cap:proyecto_fronteras}
 
 \section{De Tablas Discretas a Aproximadores de Funciones Continuos}
-En el Capítulo~\ref{cap:rl_tradicional}, constatamos la contundencia conceptual del algoritmo Q-Learning tabular, pero también su mayor limitación: la incapacidad intrínseca de escalar hacia entornos continuos o de alta dimensionalidad debido a la \textbf{maldición de la dimensionalidad}.
+En el Capítulo~4 (Aprendizaje por Refuerzo Tradicional), descubrimos la elegancia del algoritmo Q-Learning tabular: un agente aprende a desenvolverse en un mundo cuadriculado anotando números pacientemente en una libreta (la Tabla Q). Sin embargo, este método choca frontalmente contra un muro insalvable cuando intenta salir al mundo real: la temida \textbf{maldición de la dimensionalidad}.
 
-Cuando un agente interactúa con el mundo físico, sus sensores proporcionan flujos de información continuos. Para que un sistema de aprendizaje sea operativo en tales escenarios, no es viable memorizar de forma estanca cada punto del espacio de estados; el agente debe poseer la capacidad de \textbf{generalización inductiva}:
+\subsection{¿Por qué las Tablas Q no Funcionan en el Mundo Real?}
+Imaginemos que queremos que nuestro robot OptiBot aprenda a navegar en un almacén físico de $3 \times 3\text{ metros}$. En la vida real, el suelo no está dividido en 9 baldosas gigantescas; el robot se mueve en un espacio de \textbf{coordenadas métricas continuas}:
+\begin{itemize}
+  \item Si dividiéramos el almacén en casillas de un centímetro ($1\text{ cm} \times 1\text{ cm}$), tendríamos $300 \times 300 = 90{,}000$ casillas. Para 4 acciones cardinales, la tabla requeriría $360{,}000$ celdas.
+  \item Si quisiéramos precisión milimétrica ($1\text{ mm}$), la tabla se dispararía a ¡$36$ millones de celdas!
+  \item Y si además el robot mide su velocidad, aceleración o ángulo de giro, el número de combinaciones posibles se vuelve astronómico. La memoria de cualquier ordenador colapsaría al instante.
+\end{itemize}
+
+Pero el problema no es solo de memoria; es de \textbf{sentido común}:
 \begin{quote}
-  \textit{Si un robot aprende a evadir un obstáculo cuando su sensor LiDAR marca $1.50\text{ m}$, debe ser capaz de inferir una maniobra evasiva similar cuando el sensor reporte $1.52\text{ m}$, sin necesidad de haber experimentado exactamente esa lectura en el pasado.}
+  \textit{Una tabla Q es incapaz de asociar ideas. Si OptiBot descubre en su tabla que la posición $(0.50, 2.50)\text{ m}$ es segura y que debe avanzar al Este, pero un sensor reporta $(0.51, 2.49)\text{ m}$ (una diferencia de un solo centímetro), la tabla Q trata esa coordenada como un universo totalmente desconocido. ¡El robot tendría que cometer los mismos errores una y otra vez para aprender cada milímetro por separado!}
 \end{quote}
 
-Para lograrlo, la tabla matricial $Q(s, a)$ se sustituye por una \textbf{función paramétrica diferenciable} implementada mediante una red neuronal artificial profunda:
-\begin{equation}
-  Q(s, a; \boldsymbol{\theta}) \approx Q^*(s, a)
-\end{equation}
-donde $\boldsymbol{\theta} \in \mathbb{R}^d$ agrupa todos los pesos sinápticos y sesgos (\textit{biases}) ajustables de la red.
+Los seres humanos no memorizamos cada milímetro de nuestra cocina para no chocarnos con la mesa. Poseemos una facultad cognitiva extraordinaria: la \textbf{generalización}. Si sabemos esquivar un obstáculo en un rincón, sabemos extrapolar esa intuición a cualquier posición similar. Para dotar a una máquina de esa misma habilidad de generalización, jubilamos la tabla Q y contratamos a una \textbf{red neuronal artificial}.
 
-\begin{optibot}
-En esta etapa culminante, OptiBot deja atrás el tablero discreto y se conecta en tiempo real a su banco de telemetría sensorial continua. En cada milisegundo de muestreo, el procesador central del robot captura un vector de estado continuo de cuatro dimensiones $\mathbf{s} \in \mathbb{R}^4$:
+\subsection{La Red Neuronal como Calculadora de Perillas Inteligentes}
+Una red neuronal suele describirse como un misterio impenetrable, pero en aprendizaje por refuerzo podemos visualizarla con total sencillez: es una \textbf{calculadora interactiva con miles de perillas ajustables} (los pesos numéricos $\boldsymbol{\theta}_{\text{policy}}$):
 \begin{enumerate}
-  \item $d_{\text{LiDAR}} \in [0.05, 15.0]\text{ m}$: Distancia continua al obstáculo más próximo medida por el escáner láser frontal.
-  \item $b_{\text{bat}} \in [0.0, 100.0]\%$: Nivel porcentual continuo de energía en los acumuladores de litio.
-  \item $v_{\text{act}} \in [0.0, 2.5]\text{ m/s}$: Velocidad lineal instantánea del vehículo en el pasillo.
-  \item $\theta_{\text{meta}} \in [-\pi, \pi]\text{ rad}$: Error angular de orientación respecto a la bahía de descarga.
+  \item \textbf{Entrada (los ojos del robot):} En lugar de buscar una casilla en una tabla, le inyectamos directamente los números de los sensores continuos de OptiBot: su posición métrica $(x, y)$ y la distancia que le falta para llegar a la meta $(\Delta x_{\text{meta}}, \Delta y_{\text{meta}})$.
+  \item \textbf{Cuerpo interno (las perillas ajustables $\boldsymbol{\theta}_{\text{policy}}$):} La señal viaja a través de varias capas de neuronas interconectadas. Cada conexión cuenta con una ``perilla'' (peso) que amplifica o atenúa la señal eléctrica.
+  \item \textbf{Salida (el menú de recomendaciones):} En el extremo final, la red produce simultáneamente cuatro números decimales: uno para cada acción posible:
+  \[
+    \big[ Q(\mathbf{s}, \text{Norte}), \, Q(\mathbf{s}, \text{Sur}), \, Q(\mathbf{s}, \text{Este}), \, Q(\mathbf{s}, \text{Oeste}) \big]
+  \]
+  Cada valor representa la expectativa de recompensa acumulada futura. OptiBot solo tiene que consultar cuál de las cuatro salidas es la más alta para decidir qué dirección tomar.
+  \item \textbf{¿Qué significa aprender?:} Aprender ya no consiste en rellenar casillas de una hoja de cálculo, sino en \textbf{girar ligeramente esas perillas internas ($\boldsymbol{\theta}_{\text{policy}}$)} cada vez que el robot experimenta una sorpresa en el almacén, de modo que sus predicciones futuras sean cada vez más acertadas:
+  \begin{equation}
+    Q(\mathbf{s}, a; \boldsymbol{\theta}_{\text{policy}}) \approx Q^*(\mathbf{s}, a)
+  \end{equation}
 \end{enumerate}
 
-Este vector continuo $\mathbf{s}$ se alimenta a la entrada de una red neuronal profunda, la cual produce simultáneamente a su salida una estimación continua del valor $Q(\mathbf{s}, a; \boldsymbol{\theta})$ para cada una de sus cuatro acciones discretas de movimiento:
+\begin{optibot}
+En este capítulo, OptiBot regresa al almacén de $3 \times 3$ metros del Capítulo~4, pero ahora despojado de baldosas discretas y enfrentándose a un \textbf{entorno físico continuo}:
+\begin{itemize}
+  \item \textbf{Dimensiones métricas:} El suelo es una sala cuadrada de $3.0\text{ m} \times 3.0\text{ m}$. Las coordenadas del robot son números decimales continuos: $0.0 \le x \le 3.0$ y $0.0 \le y \le 3.0$.
+  \item \textbf{Muelle de Carga ($S_1$, Inicio):} OptiBot parte en la esquina superior izquierda, cerca de las coordenadas iniciales $(x_0, y_0) = (0.55\text{ m}, \, 2.35\text{ m})$.
+  \item \textbf{Estantería Central Infranqueable ($S_5$):} Un obstáculo cúbico macizo en el centro exacto de la sala ($1.0 \le x \le 2.0$ y $1.0 \le y \le 2.0$). Si OptiBot intenta ingresar, colisiona físicamente y rebota.
+  \item \textbf{Bahía de Entrega ($S_9$, Meta):} La zona objetivo en la esquina inferior derecha ($2.0 \le x \le 3.0$ e $0.0 \le y \le 1.0$, con centro de atracción en $x=2.50\text{ m}, y=0.75\text{ m}$). Al alcanzarla, el robot completa la misión con una gran bonificación de $+10.0$.
+  \item \textbf{Paredes perimetrales:} Si el robot sale de los límites ($x<0$, $x>3$, $y<0$ o $y>3$), choca contra la pared exterior sufriendo una fuerte penalización de $R = -10.0$.
+\end{itemize}
+
+En cada paso $t$, la telemetría de OptiBot extrae un vector de estado continuo de cuatro números $\mathbf{s} \in \mathbb{R}^4$:
+\begin{enumerate}
+  \item $x \in [0.0, 3.0]\text{ m}$: Coordenada horizontal actual en el almacén.
+  \item $y \in [0.0, 3.0]\text{ m}$: Coordenada vertical actual en el almacén.
+  \item $\Delta x_{\text{meta}} = x_{\text{meta}} - x$: Desplazamiento horizontal relativo hacia la Bahía de Entrega.
+  \item $\Delta y_{\text{meta}} = y_{\text{meta}} - y$: Desplazamiento vertical relativo hacia la Bahía de Entrega.
+\end{enumerate}
+
+Este vector continuo ingresa directamente en la red neuronal, la cual emite los valores $Q(\mathbf{s}, a)$ para las cuatro maniobras cardinales:
 \[
-  \mathcal{A} = \{\text{Avanzar}, \, \text{GirarIzquierda}, \, \text{GirarDerecha}, \, \text{Frenar}\}
+  \mathcal{A} = \{\text{Norte } (\uparrow), \, \text{Sur } (\downarrow), \, \text{Este } (\rightarrow), \, \text{Oeste } (\leftarrow)\}
 \]
 \end{optibot}
 
-\section{La Tríada Mortal: Por qué el RL Profundo Ingenuo Fracasa}
-Durante más de dos décadas, los investigadores intentaron sustituir directamente la tabla de Q-Learning por una red neuronal clásica, aplicando descenso de gradiente estándar tras cada paso. El resultado invariable fue el fracaso rotundo: las redes neuronales oscilaban caóticamente, los pesos explotaban hacia infinito o sufrían colapsos catastróficos de rendimiento.
+\begin{figure}[!htb]
+\centering
+\begin{tikzpicture}[
+  >=Stealth,
+  every node/.style={font=\sffamily}
+]
+  % -------------------------------------------------------------
+  % PANEL IZQUIERDO: EL MAPA CONTINUO DEL ALMACÉN (3m x 3m)
+  % Coordenadas escaladas: 1 unidad = 1.9 cm (5.7 cm x 5.7 cm)
+  % -------------------------------------------------------------
+  \begin{scope}[scale=1.9]
+    % Cuadrícula métrica de fondo
+    \draw[step=0.5, Mist!50, very thin] (0, 0) grid (3.0, 3.0);
+    \draw[step=1.0, Mist!90, thin] (0, 0) grid (3.0, 3.0);
 
-Richard Sutton y Andrew Barto identificaron con precisión las tres condiciones concurrentes que provocan esta inestabilidad severa, bautizándolas colectivamente como la \textbf{Tríada Mortal}:
-\begin{enumerate}
-  \item \textbf{Aproximador de funciones no lineal:} El uso de redes neuronales profundas con capas de activación no lineales (como ReLU o GELU).
-  \item \textbf{Bootstrapping:} La actualización de las estimaciones basándose en predicciones de la propia red en pasos temporales futuros ($R + \gamma \max Q$).
-  \item \textbf{Entrenamiento fuera de política (\textit{Off-Policy}):} El aprendizaje de la política óptima codiciosa a partir de datos recolectados bajo una política exploratoria divergente.
-\end{enumerate}
+    % Paredes perimetrales del almacén
+    \draw[line width=1.6pt, draw=TealDark] (0, 0) rectangle (3.0, 3.0);
 
-\subsection{Las Dos Patologías Destructivas del Aprendizaje}
-Cuando la Tríada Mortal se manifiesta en una arquitectura ingenua, desencadena dos patologías fatales:
+    % Zona de Inicio S1 (Muelle de carga)
+    \fill[Teal!12] (0, 2.0) rectangle (1.0, 3.0);
+    \draw[Teal, thick, dashed] (0, 2.0) rectangle (1.0, 3.0);
+    \node[align=center, font=\scriptsize\bfseries\color{TealDark}] at (0.5, 2.75) {Inicio ($S_1$)};
 
-\subsubsection*{1. Correlación temporal en las observaciones y olvido catastrófico}
-En el aprendizaje supervisado clásico, los algoritmos de optimización se fundamentan en el supuesto de que las muestras de entrenamiento son \textbf{independientes e idénticamente distribuidas} (i.i.d.). 
+    % Obstáculo Central S5 (Estantería fija infranqueable)
+    \fill[Mist!85] (1.0, 1.0) rectangle (2.0, 2.0);
+    \draw[Ink, thick] (1.0, 1.0) rectangle (2.0, 2.0);
+    \foreach \d in {1.2, 1.4, 1.6, 1.8} {
+      \draw[Ink!30, thin] (\d, 1.0) -- (1.0, \d);
+      \draw[Ink!30, thin] (2.0, \d) -- (\d, 2.0);
+    }
+    \node[align=center, font=\scriptsize\bfseries\color{Ink}] at (1.5, 1.5) {MURO ($S_5$)\\\tiny Infranqueable};
 
-En el aprendizaje por refuerzo, este supuesto se viola de manera flagrante: el robot experimenta secuencias temporales contiguas fuertemente correlacionadas ($s_{t+1}$ depende directamente de $s_t$). Si OptiBot atraviesa un pasillo oscuro durante diez minutos, la red solo recibe datos de penumbra y ajusta sus pesos exclusivamente para ese entorno, sufriendo un \textbf{olvido catastrófico} de todo lo que había aprendido previamente en zonas iluminadas.
+    % Zona de Meta S9 (Bahía de entrega)
+    \fill[Leaf!18] (2.0, 0.0) rectangle (3.0, 1.0);
+    \draw[Leaf, thick] (2.0, 0.0) rectangle (3.0, 1.0);
+    \node[align=center, font=\scriptsize\bfseries\color{Leaf}] at (2.5, 0.35) {\textbf{META ($S_9$)}\\\tiny Bahía $+10.0$};
+    \node[circle, draw=Leaf, fill=Leaf, inner sep=2.5pt] (goalCenter) at (2.5, 0.75) {};
 
-\subsubsection*{2. El problema del blanco móvil (\textit{Moving Target})}
-En la regla de actualización estándar de Q-Learning, el objetivo hacia el cual se ajusta la red es:
-\begin{equation}
-  y_t = R_{t+1} + \gamma \max_{a'} Q(S_{t+1}, a'; \boldsymbol{\theta})
-\end{equation}
-¡Nótese que el objetivo depende directamente de los mismos parámetros $\boldsymbol{\theta}$ que se están intentando ajustar! 
+    % Posición actual continua de OptiBot
+    \coordinate (optibotPos) at (0.55, 2.35);
 
-Cuando el optimizador modifica $\boldsymbol{\theta}$ para corregir la predicción en el estado actual $S_t$, altera involuntariamente las predicciones en el estado futuro $S_{t+1}$. Esto equivale a pedirle a un tirador que acierte en una diana que se mueve a la misma velocidad que su propio brazo: el modelo persigue un blanco dinámicamente inestable, induciendo divergencia exponencial.
+    % Proyecciones tenues a los ejes coordenados
+    \draw[draw=Coral!50, dotted, line width=0.8pt] (0.55, 0) -- (optibotPos) -- (0, 2.35);
 
-\section{La Revolución de DQN: Los Dos Mecanismos Estabilizadores (DeepMind, 2015)}
-En 2015, Volodymyr Mnih y el equipo de Google DeepMind publicaron en la prestigiosa revista \textit{Nature} el algoritmo \textbf{Deep Q-Network} (DQN). Lograron entrenar una única red neuronal profunda para jugar a más de 40 videojuegos clásicos de Atari 2600 directamente a partir de los píxeles de la pantalla, superando el nivel de jugadores humanos profesionales.
+    % Trayectoria continua aprendida (Ruta Superior Óptima)
+    \draw[->, line width=1.4pt, draw=Coral, rounded corners=12pt] 
+      (optibotPos) -- (2.5, 2.35) -- (goalCenter);
+    \node[font=\tiny\bfseries\color{Coral}, above=1pt] at (1.5, 2.35) {Ruta Continua Óptima};
 
-La genialidad de DQN radicó en neutralizar las patologías de la Tríada Mortal mediante la incorporación de dos mecanismos arquitectónicos revolucionarios:
+    % Trayectoria alternativa (Ruta Inferior)
+    \draw[->, line width=1.0pt, draw=Coral!70, dashed, rounded corners=12pt] 
+      (optibotPos) -- (0.55, 0.75) -- (2.35, 0.75);
+    \node[font=\tiny\bfseries\color{Coral!70}, above=1pt] at (1.3, 0.75) {Ruta Alternativa};
 
-\subsection{1. Buffer de Repetición de Experiencias (\textit{Experience Replay})}
-En lugar de entrenar la red con la transición inmediata producida en cada paso y luego descartarla, el agente almacena cada una de sus vivencias en una memoria finita circular denominada \textbf{Replay Buffer} ($\mathcal{D}$):
-\begin{equation}
-  e_t = \Big( s_t, \, a_t, \, r_{t+1}, \, s_{t+1}, \, \text{terminado}_{t+1} \Big) \in \mathcal{D}
-\end{equation}
+    % Robot OptiBot
+    \fill[Coral] (optibotPos) circle (4pt);
+    \draw[Coral!90!black, thick] (optibotPos) circle (6.5pt);
+    \node[above=6pt, font=\scriptsize\bfseries\color{Coral!90!black}] at (optibotPos) {OptiBot};
 
-Durante la fase de optimización, el algoritmo no entrena con la última transición; en su lugar, \textbf{extrae un mini-batch de transiciones muestreadas al azar de manera uniforme} de $\mathcal{D}$.
+    % Indicadores cardinales de movimiento
+    \draw[->, line width=0.9pt, draw=TealDark] (optibotPos) -- ++(0, 0.28);
+    \draw[->, line width=0.9pt, draw=TealDark] (optibotPos) -- ++(0, -0.28);
+    \draw[->, line width=1.3pt, draw=Coral] (optibotPos) -- ++(0.35, 0);
+    \draw[->, line width=0.9pt, draw=TealDark] (optibotPos) -- ++(-0.28, 0);
+
+    % Ejes y Marcas numéricas
+    \draw[->, line width=1.0pt, draw=Ink] (-0.1, 0) -- (3.25, 0) node[right, font=\scriptsize\bfseries] {$x$ (m)};
+    \draw[->, line width=1.0pt, draw=Ink] (0, -0.1) -- (0, 3.25) node[above, font=\scriptsize\bfseries] {$y$ (m)};
+    \node[below left=2pt, font=\tiny] at (0, 0) {0.0};
+    \foreach \v in {1, 2, 3} {
+      \draw (\v, 0.04) -- (\v, -0.04) node[below=2pt, font=\tiny] {\v.0};
+      \draw (0.04, \v) -- (-0.04, \v) node[left=2pt, font=\tiny] {\v.0};
+    }
+
+    % Etiquetas de bordes perimetrales
+    \node[font=\tiny\bfseries\color{TealDark}, above=2pt] at (1.5, 3.0) {Límite Norte (Pared)};
+    \node[font=\tiny\bfseries\color{TealDark}, below=12pt] at (1.5, 0.0) {Límite Sur (Pared)};
+    \node[font=\tiny\bfseries\color{TealDark}, rotate=90, above=12pt] at (0, 1.5) {Límite Oeste};
+    \node[font=\tiny\bfseries\color{TealDark}, rotate=-90, above=4pt] at (3.0, 1.5) {Límite Este};
+  \end{scope}
+
+  % -------------------------------------------------------------
+  % PANEL DERECHO: TARJETAS DE TELEMETRÍA Y ACCIÓN
+  % -------------------------------------------------------------
+  \begin{scope}[shift={(7.3, 0.0)}]
+    % Tarjeta 1: Vector Sensorial de Entrada
+    \node[rectangle, draw=TealDark, fill=Teal!6, line width=0.9pt, rounded corners=4pt, 
+          text width=7.1cm, inner sep=5.5pt, anchor=north west] (card1) at (0, 5.9) {
+      \textbf{\color{TealDark}\footnotesize 1. Vector Sensorial de Entrada $\mathbf{s}_t \in \mathbb{R}^4$}\\[2pt]
+      \scriptsize
+      $\bullet$ \textbf{Posición métrica continua:} $x_t = 0.55\text{ m}, \;\; y_t = 2.35\text{ m}$\\[1.5pt]
+      $\bullet$ \textbf{Diferencial a Meta ($S_9$ en $(2.50, 0.75)$):}\\
+      \hspace*{0.7em} $\Delta x_{\text{meta}} = 2.50 - 0.55 = \mathbf{+1.95\text{ m}}$\\
+      \hspace*{0.7em} $\Delta y_{\text{meta}} = 0.75 - 2.35 = \mathbf{-1.60\text{ m}}$\\[1.5pt]
+      $\bullet$ \textbf{Distancia euclídea:} $d_{\text{meta}} = \sqrt{\Delta x^2 + \Delta y^2} \approx 2.52\text{ m}$\\[2pt]
+      \textbf{Vector enviado a la Red Policy:}\\
+      $\mathbf{s}_t = \big[ 0.55\text{ m}, \; 2.35\text{ m}, \; +1.95\text{ m}, \; -1.60\text{ m} \big]^T$
+    };
+
+    % Tarjeta 2: Menú de Acciones
+    \node[rectangle, draw=Coral, fill=Coral!6, line width=0.9pt, rounded corners=4pt, 
+          text width=7.1cm, inner sep=5.5pt, below=6pt of card1.south west, anchor=north west] (card2) {
+      \textbf{\color{Coral}\footnotesize 2. Espacio de Acciones Discretas $\mathcal{A}$}\\[2pt]
+      \scriptsize
+      $\bullet$ $a = 0$ (Norte $\uparrow$): $\Delta y = +0.10\text{ m}$\\
+      $\bullet$ $a = 1$ (Sur $\downarrow$): $\Delta y = -0.10\text{ m}$\\
+      $\bullet$ \textbf{\color{Coral}$a = 2$ (Este $\rightarrow$): $\Delta x = +0.10\text{ m}$ [Seleccionada]}\\
+      $\bullet$ $a = 3$ (Oeste $\leftarrow$): $\Delta x = -0.10\text{ m}$\\[1.5pt]
+      \textit{La red evalúa en paralelo las 4 acciones para el estado continuo.}
+    };
+
+    % Tarjeta 3: Reglas de Dinámica y Recompensas
+    \node[rectangle, draw=Leaf, fill=Leaf!6, line width=0.9pt, rounded corners=4pt, 
+          text width=7.1cm, inner sep=5.5pt, below=6pt of card2.south west, anchor=north west] (card3) {
+      \textbf{\color{Leaf}\footnotesize 3. Dinámica del Almacén y Recompensas}\\[2pt]
+      \scriptsize
+      $\bullet$ \textbf{Paso continuo libre:} $r = -0.05$ (incentiva ruta corta).\\
+      $\bullet$ \textbf{Colisión con pared o Muro $S_5$:} $r = -1.0$ (rebote).\\
+      $\bullet$ \textbf{Bahía de Entrega Meta $S_9$:} $r = +10.0$ (terminal).
+    };
+  \end{scope}
+
+\end{tikzpicture}
+\caption{El entorno continuo del almacén de OptiBot ($3\text{ m} \times 3\text{ m}$) con arquitectura de telemetría sensorial. A la izquierda: mapa espacial continuo con las trayectorias óptimas aprendidas para rodear el muro central ($S_5$). A la derecha: descomposición del vector sensorial de 4 dimensiones $\mathbf{s}_t = [x, y, \Delta x_{\text{meta}}, \Delta y_{\text{meta}}]^T$, el menú de acciones cardinales y las reglas de recompensa que alimentan a la red neuronal.}
+\label{fig:optibot_continuous_warehouse}
+\end{figure}
+
+Como ilustra la Figura~\ref{fig:optibot_continuous_warehouse}, OptiBot ya no salta torpemente entre celdas; se desliza fluidamente en un mundo físico real. Para procesar este vector sensorial $\mathbf{s}$ en tiempo real, OptiBot recurre a una arquitectura que combina dos redes neuronales idénticas en estructura, como se aprecia en la Figura~\ref{fig:dqn_architecture}.
+
+\begin{figure}[!htb]
+\centering
+\begin{tikzpicture}[
+  >=Stealth,
+  every node/.style={font=\sffamily},
+  inputNode/.style={circle, draw=TealDark, line width=1.1pt, fill=Teal!15, minimum size=0.82cm, inner sep=0pt, font=\scriptsize\bfseries},
+  hiddenNode/.style={circle, draw=Coral, line width=1.0pt, fill=Coral!15, minimum size=0.64cm, inner sep=0pt},
+  outputNode/.style={circle, draw=Leaf, line width=1.1pt, fill=Leaf!20, minimum size=0.82cm, inner sep=0pt, font=\scriptsize\bfseries},
+  decisionBox/.style={rectangle, draw=TealDark, line width=1.3pt, fill=Mist!40, rounded corners=4pt, font=\small\bfseries, align=center, inner sep=6pt},
+  actionBadge/.style={rectangle, draw=TealDark!50, fill=white, rounded corners=2pt, inner sep=2.5pt, font=\scriptsize\bfseries\color{Ink}},
+  % Estilos para la Red Target (tonos neutros para indicar pesos congelados)
+  targetInputNode/.style={circle, draw=SoftText, line width=1.1pt, fill=Mist!45, minimum size=0.82cm, inner sep=0pt, font=\scriptsize\bfseries},
+  targetHiddenNode/.style={circle, draw=SoftText, line width=1.0pt, fill=Mist!70, minimum size=0.64cm, inner sep=0pt},
+  targetOutputNode/.style={circle, draw=SoftText, line width=1.1pt, fill=Mist!85, minimum size=0.82cm, inner sep=0pt, font=\scriptsize\bfseries},
+  targetDecisionBox/.style={rectangle, draw=SoftText, line width=1.3pt, fill=Mist!30, rounded corners=4pt, font=\small\bfseries, align=center, inner sep=6pt},
+  targetActionBadge/.style={rectangle, draw=SoftText!60, fill=white, rounded corners=2pt, inner sep=2.5pt, font=\scriptsize\bfseries\color{SoftText}}
+]
+  % ==========================================
+  % 1. RED POLICY (\theta_policy) - EVALUACIÓN Y ENTRENAMIENTO
+  % ==========================================
+  \node[anchor=west, font=\normalsize\bfseries\color{TealDark}] at (-0.6, 4.3) {\textbf{1. Red Policy ($\boldsymbol{\theta}_{\text{policy}}$):} Evaluación, Selección de Acciones y Entrenamiento};
+
+  % Encabezados de columnas Red Policy
+  \node[align=center, font=\scriptsize\bfseries\color{TealDark}] at (0, 3.45) {Estado actual\\$\mathbf{s} \in \mathbb{R}^4$};
+  \node[align=center, font=\scriptsize\bfseries\color{Coral}] at (2.3, 3.45) {Capa Oculta 1};
+  \node[align=center, font=\scriptsize\bfseries\color{Coral}] at (4.3, 3.45) {Capa Oculta 2};
+  \node[align=center, font=\scriptsize\bfseries\color{Leaf}] at (6.4, 3.45) {Valores $Q$\\$Q(\mathbf{s}, a; \boldsymbol{\theta}_{\text{policy}})$};
+
+  % Inputs Red Policy
+  \node[inputNode] (in1) at (0, 2.4) {$x$};
+  \node[inputNode] (in2) at (0, 1.6) {$y$};
+  \node[inputNode] (in3) at (0, 0.8) {$\Delta x_{\text{m}}$};
+  \node[inputNode] (in4) at (0, 0.0) {$\Delta y_{\text{m}}$};
+
+  % Hidden layer 1 Policy
+  \foreach \i in {1,2,3,4,5} {
+    \node[hiddenNode] (h1\i) at (2.3, 3.0 - \i*0.6) {};
+  }
+
+  % Hidden layer 2 Policy
+  \foreach \i in {1,2,3,4,5} {
+    \node[hiddenNode] (h2\i) at (4.3, 3.0 - \i*0.6) {};
+  }
+
+  % Outputs Policy
+  \node[outputNode] (out1) at (6.4, 2.4) {$Q_0$};
+  \node[outputNode] (out2) at (6.4, 1.6) {$Q_1$};
+  \node[outputNode] (out3) at (6.4, 0.8) {$Q_2$};
+  \node[outputNode] (out4) at (6.4, 0.0) {$Q_3$};
+
+  % Connections inputs to h1
+  \foreach \i in {1,2,3,4} {
+    \foreach \j in {1,2,3,4,5} {
+      \draw[->, draw=TealDark!35, line width=0.4pt] (in\i) -- (h1\j);
+    }
+  }
+
+  % Connections h1 to h2
+  \foreach \i in {1,2,3,4,5} {
+    \foreach \j in {1,2,3,4,5} {
+      \draw[->, draw=Coral!35, line width=0.4pt] (h1\i) -- (h2\j);
+    }
+  }
+
+  % Connections h2 to outputs
+  \foreach \i in {1,2,3,4,5} {
+    \foreach \j in {1,2,3,4} {
+      \draw[->, draw=Leaf!40, line width=0.5pt] (h2\i) -- (out\j);
+    }
+  }
+
+  % Lineas horizontales hacia la barra colectora Policy
+  \draw[line width=1.0pt, draw=TealDark!80] (out1.east) -- (9.1, 2.4);
+  \draw[line width=1.0pt, draw=TealDark!80] (out2.east) -- (9.1, 1.6);
+  \draw[line width=1.0pt, draw=TealDark!80] (out3.east) -- (9.1, 0.8);
+  \draw[line width=1.0pt, draw=TealDark!80] (out4.east) -- (9.1, 0.0);
+
+  % Etiquetas de accion Policy
+  \node[actionBadge] at (7.8, 2.4) {Norte ($\uparrow$)};
+  \node[actionBadge] at (7.8, 1.6) {Sur ($\downarrow$)};
+  \node[actionBadge] at (7.8, 0.8) {Este ($\rightarrow$)};
+  \node[actionBadge] at (7.8, 0.0) {Oeste ($\leftarrow$)};
+
+  % Barra colectora vertical Policy
+  \draw[line width=1.4pt, draw=TealDark] (9.1, 2.4) -- (9.1, 0.0);
+
+  % Selector Decision Box Policy
+  \node[decisionBox, anchor=west] (dec) at (10.0, 1.2) {$\arg\max_a Q(\mathbf{s}, a)$\\[3pt]\footnotesize Acción activa $a_t$};
+  \draw[->, line width=1.4pt, draw=TealDark] (9.1, 1.2) -- (dec.west);
+
+  % ==========================================
+  % SINCRONIZACIÓN PERIÓDICA DE PESOS
+  % ==========================================
+  \node[rectangle, draw=Coral!80, fill=Coral!8, rounded corners=4pt, line width=1.0pt, inner sep=4.5pt, font=\scriptsize\bfseries\color{Coral!90!black}, align=center] (sync) at (3.3, -1.25) {Sincronización periódica de pesos\\[2pt]\small $\boldsymbol{\theta}_{\text{target}} \leftarrow \boldsymbol{\theta}_{\text{policy}}$ (cada $C$ episodios)};
+  \draw[->, line width=1.3pt, draw=Coral, dashed] (3.3, -0.4) -- (sync.north);
+  \draw[->, line width=1.3pt, draw=Coral, dashed] (sync.south) -- (3.3, -2.1);
+
+  % ==========================================
+  % 2. RED TARGET (\theta_target) - MISMO ESTADO ACTUAL Y VECTOR TARGET
+  % ==========================================
+  \node[anchor=west, font=\normalsize\bfseries\color{SoftText}] at (-0.6, -2.35) {\textbf{2. Red Target ($\boldsymbol{\theta}_{\text{target}}$):} Copia Gemela que Procesa el Mismo Estado $\mathbf{s}$};
+
+  % Encabezados de columnas Red Target
+  \node[align=center, font=\scriptsize\bfseries\color{SoftText}] at (0, -3.2) {Mismo estado\\$\mathbf{s} \in \mathbb{R}^4$};
+  \node[align=center, font=\scriptsize\bfseries\color{SoftText}] at (2.3, -3.2) {Capa Oculta 1};
+  \node[align=center, font=\scriptsize\bfseries\color{SoftText}] at (4.3, -3.2) {Capa Oculta 2};
+  \node[align=center, font=\scriptsize\bfseries\color{SoftText}] at (6.4, -3.2) {Valores $Q$ base\\$Q(\mathbf{s}, a; \boldsymbol{\theta}_{\text{target}})$};
+
+  % Inputs Red Target (Mismo estado s, sin primas)
+  \node[targetInputNode] (tin1) at (0, -4.1) {$x$};
+  \node[targetInputNode] (tin2) at (0, -4.9) {$y$};
+  \node[targetInputNode] (tin3) at (0, -5.7) {$\Delta x_{\text{m}}$};
+  \node[targetInputNode] (tin4) at (0, -6.5) {$\Delta y_{\text{m}}$};
+
+  % Hidden layer 1 Target
+  \foreach \i in {1,2,3,4,5} {
+    \node[targetHiddenNode] (th1\i) at (2.3, -3.5 - \i*0.6) {};
+  }
+
+  % Hidden layer 2 Target
+  \foreach \i in {1,2,3,4,5} {
+    \node[targetHiddenNode] (th2\i) at (4.3, -3.5 - \i*0.6) {};
+  }
+
+  % Outputs Target
+  \node[targetOutputNode] (tout1) at (6.4, -4.1) {$Q_0$};
+  \node[targetOutputNode] (tout2) at (6.4, -4.9) {$Q_1$};
+  \node[targetOutputNode] (tout3) at (6.4, -5.7) {$Q_2$};
+  \node[targetOutputNode] (tout4) at (6.4, -6.5) {$Q_3$};
+
+  % Connections inputs to th1
+  \foreach \i in {1,2,3,4} {
+    \foreach \j in {1,2,3,4,5} {
+      \draw[->, draw=SoftText!35, line width=0.4pt] (tin\i) -- (th1\j);
+    }
+  }
+
+  % Connections th1 to th2
+  \foreach \i in {1,2,3,4,5} {
+    \foreach \j in {1,2,3,4,5} {
+      \draw[->, draw=SoftText!35, line width=0.4pt] (th1\i) -- (th2\j);
+    }
+  }
+
+  % Connections th2 to outputs
+  \foreach \i in {1,2,3,4,5} {
+    \foreach \j in {1,2,3,4} {
+      \draw[->, draw=SoftText!40, line width=0.5pt] (th2\i) -- (tout\j);
+    }
+  }
+
+  % Lineas horizontales hacia la barra colectora Target
+  \draw[line width=1.0pt, draw=SoftText!80] (tout1.east) -- (9.1, -4.1);
+  \draw[line width=1.0pt, draw=SoftText!80] (tout2.east) -- (9.1, -4.9);
+  \draw[line width=1.0pt, draw=SoftText!80] (tout3.east) -- (9.1, -5.7);
+  \draw[line width=1.0pt, draw=SoftText!80] (tout4.east) -- (9.1, -6.5);
+
+  % Etiquetas de accion Target
+  \node[targetActionBadge] at (7.8, -4.1) {Norte ($\uparrow$)};
+  \node[targetActionBadge] at (7.8, -4.9) {Sur ($\downarrow$)};
+  \node[targetActionBadge] at (7.8, -5.7) {Este ($\rightarrow$)};
+  \node[targetActionBadge] at (7.8, -6.5) {Oeste ($\leftarrow$)};
+
+  % Barra colectora vertical Target
+  \draw[line width=1.4pt, draw=SoftText] (9.1, -4.1) -- (9.1, -6.5);
+
+  % Selector Target Box (Vector Target sustituyendo accion activa)
+  \node[targetDecisionBox, anchor=west] (tdec) at (10.0, -5.3) {Vector Target $\mathbf{y}_{\text{target}}$\\[3pt]\footnotesize Sustituye $Q_{\text{target}}$ en acción $a_t$\\[2pt]\scriptsize Pauta de entrenamiento};
+  \draw[->, line width=1.4pt, draw=SoftText] (9.1, -5.3) -- (tdec.west);
+
+\end{tikzpicture}
+\caption{Arquitectura dual de Deep Q-Network (DQN) para la navegación continua de OptiBot. Arriba: la \textbf{Red Policy} ($\boldsymbol{\theta}_{\text{policy}}$), donde entrena el agente y predice los valores de acción en tiempo real a partir del estado capturado $\mathbf{s} = [x, y, \Delta x_{\text{m}}, \Delta y_{\text{m}}]$. Abajo: la \textbf{Red Target} ($\boldsymbol{\theta}_{\text{target}}$), copia gemela que procesa el \textbf{mismo estado actual} $\mathbf{s}$ para conformar la pauta del vector target $\mathbf{y}_{\text{target}}$, sustituyendo únicamente la acción ejecutada por el blanco de Bellman. En el centro, la sincronización periódica de parámetros transfiere los pesos aprendidos de la red policy a la red target.}
+\label{fig:dqn_architecture}
+\end{figure}
+
+\section{El Algoritmo Deep Q-Learning: Las Dos Redes y el Flujo Maestro}
+Sustituir una tabla por una red neuronal parece una idea obvia, pero durante dos décadas fue considerado una misión casi imposible en inteligencia artificial. Cuando los investigadores intentaban conectar una red neuronal a la ecuación de Bellman en los años 90, el entrenamiento fallaba estrepitosamente: la red empezaba a arrojar predicciones absurdas, los valores oscilaban sin control y el sistema divergía al infinito.
+
+¿Por qué ocurría este desastre? Porque el aprendizaje por refuerzo rompe las dos reglas sagradas del aprendizaje automático supervisado clásico:
+
 \begin{itemize}
-  \item \textbf{Ruptura de correlaciones temporales:} Al mezclar aleatoriamente transiciones de diferentes episodios y momentos temporales dispares, se restaura el régimen estadístico i.i.d.
-  \item \textbf{Eficiencia muestral masiva:} Cada experiencia costosa recolectada en el entorno físico puede reutilizarse en decenas de actualizaciones de gradiente a lo largo del tiempo.
+  \item \textbf{Problema 1: La trampa del tiempo y el olvido catastrófico (Correlación Temporal).} En visión artificial, le mostramos a la red millones de fotos barajadas al azar (un perro, luego un coche, luego un gato). Pero un robot que camina por un pasillo experimenta secuencias fuertemente dependientes en el tiempo: ``paso adelante, paso adelante, paso adelante''. Si entrenamos a la red solo con lo que acaba de pasar, sufrirá de \textbf{olvido catastrófico}: aprenderá a avanzar en línea recta, pero olvidará por completo cómo girar en una esquina.
+  \item \textbf{Problema 2: Disparar a una diana sobre patines (El Blanco Móvil).} En aprendizaje tradicional, la respuesta correcta de un examen es fija. Pero en Q-Learning, ¡la red calcula su propia respuesta correcta usando la ecuación de Bellman! Si usamos una única red para predecir el valor actual y también para calcular el objetivo futuro, cada vez que giremos las perillas para acercarnos a la diana, ¡la diana misma se desplazará de sitio! Es como intentar clavar una flecha en un blanco que huye sobre patines atado a tus propios pies.
 \end{itemize}
 
-\subsection{2. Red Objetivo Congelada (\textit{Target Network})}
-Para solucionar definitivamente el problema del blanco móvil, DQN desacopla el cálculo del objetivo manteniendo \textbf{dos conjuntos independientes de parámetros neuronales}:
-\begin{enumerate}
-  \item \textbf{Red Online ($\boldsymbol{\theta}$):} La red neuronal principal cuyos pesos se actualizan continuamente en cada paso de gradiente. Es la red que decide las acciones del agente.
-  \item \textbf{Red Objetivo o Target Network ($\boldsymbol{\theta}^-$):} Una copia estructural idéntica cuyos parámetros se mantienen \textbf{estrictamente fijos y congelados} durante un período de $C$ pasos temporales.
-\end{enumerate}
+En 2013 y 2015, los científicos de \textbf{DeepMind} (Mnih et al.) revolucionaron la computación al resolver de raíz estos dos dilemas mediante el algoritmo \textbf{Deep Q-Networks (DQN)}, introduciendo dos innovaciones maestras: el \textbf{Experience Replay} (el álbum de recuerdos) y la \textbf{Arquitectura Dual con Red Target Congelada}.
 
-El objetivo de Bellman para cada muestra $i$ del mini-batch se calcula evaluando exclusivamente los pesos congelados de la red target:
-\begin{equation}
-  \label{eq:dqn_target}
-  y_i = r_i + \gamma (1 - \text{terminado}_i) \max_{a' \in \mathcal{A}} Q(s'_i, a'; \boldsymbol{\theta}^-)
-\end{equation}
+A continuación, descompondremos el funcionamiento de DQN a través de un viaje estructurado en 5 fases lógicas y 10 pasos operativos.
 
-Dado que los parámetros $\boldsymbol{\theta}^-$ permanecen congelados, el objetivo $y_i$ actúa como un valor constante y estacionario durante la optimización. Periódicamente (cada $C$ pasos), los pesos de la red online se copian hacia la red objetivo ($\boldsymbol{\theta}^- \leftarrow \boldsymbol{\theta}$), o alternativamente se actualizan de forma suave mediante promedio de Polyak:
-\begin{equation}
-  \boldsymbol{\theta}^- \leftarrow \tau \boldsymbol{\theta} + (1 - \tau) \boldsymbol{\theta}^- \quad (\text{con } \tau \ll 1, \text{ típicamente } \tau = 0.005)
-\end{equation}
+\subsection{Fase 1: El Nacimiento de las Dos Redes Gemelas}
+El algoritmo arranca construyendo dos copias arquitectónicas idénticas de la misma red neuronal:
+\begin{itemize}
+  \item \textbf{Paso 1: Creación de la Red Policy ($\boldsymbol{\theta}_{\text{policy}}$).} Se inicializan sus perillas (pesos y sesgos) con valores aleatorios diminutos. En este instante inicial, OptiBot no sabe nada del almacén: no distingue un pasillo despejado de un muro impenetrable. Esta será la red ``estudiante'': la que interactuará con el entorno, tomará decisiones y se entrenará paso a paso.
+  \item \textbf{Paso 2: Clonación y congelación de la Red Target ($\boldsymbol{\theta}_{\text{target}}$).} Se realiza una copia idéntica en la memoria del ordenador:
+  \begin{equation}
+    \boldsymbol{\theta}_{\text{target}} \leftarrow \boldsymbol{\theta}_{\text{policy}}
+  \end{equation}
+  Ambas redes tienen exactamente los mismos cables y perillas. Sin embargo, la Red Target se coloca en un ``congelador'' temporal: sus perillas quedan bloqueadas y no se actualizarán en cada paso. Ella será la ``examinadora'' imparcial que sostendrá la diana de Bellman completamente inmóvil.
+\end{itemize}
 
-\section{Función de Pérdida y Descenso de Gradiente}
-Con el objetivo $y_i$ estabilizado, el entrenamiento de la red online se formula como un problema de regresión supervisada, minimizando el \textbf{Error Cuadrático Medio de Bellman} (\textit{Mean Squared Bellman Error}, o MSBE):
-\begin{equation}
-  \mathcal{L}(\boldsymbol{\theta}) = \frac{1}{B} \sum_{i=1}^B \Big( y_i - Q(s_i, a_i; \boldsymbol{\theta}) \Big)^2
-\end{equation}
-donde $B$ denota el tamaño del mini-batch (habitualmente $B = 32$ o $64$).
+\subsection{Fase 2: Vivir la Aventura y Guardar Fotos en el Álbum}
+Con las dos mentes preparadas, OptiBot sale a explorar el almacén:
+\begin{itemize}
+  \item \textbf{Paso 3: Percepción sensorial y acción.} El robot lee su posición métrica continua:
+  \begin{equation}
+    \mathbf{s}_t = [x_t, \, y_t, \, \Delta x_{\text{meta}}, \, \Delta y_{\text{meta}}]^T
+  \end{equation}
+  Para decidir qué hacer, utiliza la conocida regla $\varepsilon$-greedy: la mayor parte del tiempo ($1-\varepsilon$) consulta a su Red Policy y escoge la acción con mayor valor $Q$; pero a veces ($\varepsilon$) explora una dirección al azar. El robot ejecuta el movimiento elegido $a_t$, el entorno físico responde, recibe una recompensa $r_{t+1}$ y aterriza en una nueva coordenada métrica $\mathbf{s}_{t+1}$.
+  \item \textbf{Paso 3a: Guardar la experiencia en el Álbum (\textit{Experience Replay}, $\mathcal{D}$).} En lugar de entrenar de inmediato con lo que acaba de vivir (lo que causaría olvido catastrófico), OptiBot empaqueta su vivencia en una tupla indivisible de 5 elementos:
+  \begin{equation}
+    e_t = \big( \mathbf{s}_t, \, a_t, \, r_{t+1}, \, \mathbf{s}_{t+1}, \, \text{terminal}_{t+1} \big)
+  \end{equation}
+  y la guarda en una memoria de cola circular (FIFO) con capacidad para miles de recuerdos (por ejemplo, $50{,}000$ pasos). Si el álbum se llena, cada recuerdo nuevo expulsa pacíficamente al más antiguo.
+  \item \textbf{Paso 3b: Barajar y extraer un lote aleatorio (\textit{Mini-Batch Sampling}).} Para entrenar, el agente no mira la última foto; extrae una muestra aleatoria (un puñado de 32 o 64 recuerdos) dispersos en el tiempo y en el espacio:
+  \begin{equation}
+    \mathcal{B} = \{e_1, e_2, \dots, e_B\} \sim \mathcal{D}
+  \end{equation}
+  ¡Al mezclar recuerdos de esquinas, pasillos y choques ocurridos en momentos distintos, la correlación temporal se destruye por completo!
+\end{itemize}
 
-\subsection{Pérdida de Huber (Smooth L1 Loss)}
-En presencia de transiciones con recompensas atípicas o discontinuidades abruptas, el error al cuadrado puede producir gradientes descomunales que desestabilicen los pesos de la red. Por ello, DQN sustituye comúnmente el error cuadrático por la \textbf{Pérdida de Huber}:
-\begin{equation}
-  \mathcal{L}_{\text{Huber}}(\delta) = \begin{cases}
-    \frac{1}{2} \delta^2 & \text{si } |\delta| \le 1.0 \\[6pt]
-    |\delta| - \frac{1}{2} & \text{en otro caso}
-  \end{cases}
-\end{equation}
-La función de Huber se comporta cuadráticamente para errores pequeños (facilitando una convergencia suave y precisa) y linealmente para errores grandes (impidiendo la explosión del gradiente).
+\subsection{Fase 3: La Evaluación de Bellman y la Diana Fija}
+Ahora que tenemos un lote de recuerdos sobre la mesa, examinemos cómo se evalúa una experiencia concreta $(\mathbf{s}, a, r, \mathbf{s}', \text{term})$:
+\begin{itemize}
+  \item \textbf{Paso 4: La Red Policy evalúa el estado inicial $\mathbf{s}$.} Le mostramos las coordenadas $\mathbf{s}$ a la Red Policy. Esta enciende sus perillas y calcula cuatro números de salida:
+  \[
+    \big[ Q(\mathbf{s}, \text{Norte}), \, Q(\mathbf{s}, \text{Sur}), \, Q(\mathbf{s}, \text{Este}), \, Q(\mathbf{s}, \text{Oeste}) \big]
+  \]
+  Anotamos la predicción que la red hizo para la acción $a$ que el robot ejecutó realmente: este valor es $Q(\mathbf{s}, a; \boldsymbol{\theta}_{\text{policy}})$.
+  \item \textbf{Paso 5: La Red Target evalúa ese mismo estado inicial $\mathbf{s}$.} Introducimos las mismas coordenadas $\mathbf{s}$ en la Red Target congelada para obtener sus valores de referencia base:
+  \[
+    Q(\mathbf{s}, \cdot; \boldsymbol{\theta}_{\text{target}})
+  \]
+  \item \textbf{Paso 6: Cálculo del valor objetivo de Bellman ($Q_{\text{target}}$).} ¿Cuál debió haber sido la nota perfecta para esa acción? Para saberlo, consultamos el futuro: introducimos el \textbf{siguiente estado alcanzado} $\mathbf{s}'$ en la \textbf{Red Target congelada}. Aplicamos la ecuación de Bellman:
+  \begin{itemize}
+    \item Si el paso terminó el episodio ($\text{terminal} = \text{True}$): el juego concluyó y no hay futuro:
+    \begin{equation}
+      Q_{\text{target}} = r
+    \end{equation}
+    \item Si el robot continúa navegando ($\text{terminal} = \text{False}$): sumamos la recompensa inmediata y el valor de la mejor opción futura descontada:
+    \begin{equation}
+      \label{eq:bellman_q_target_step}
+      Q_{\text{target}} = r + \gamma \max_{a' \in \mathcal{A}} Q(\mathbf{s}', a'; \boldsymbol{\theta}_{\text{target}})
+    \end{equation}
+  \end{itemize}
+  \textbf{Aspecto clave:} Como este valor $Q_{\text{target}}$ se calcula con la Red Target (cuyas perillas están congeladas), \textbf{este número es una roca sólida}. La diana no se mueve mientras disparamos.
+\end{itemize}
 
-\subsection{El Enfoque del Semi-Gradiente}
-Al calcular la derivada de la pérdida respecto a los parámetros de la red online $\boldsymbol{\theta}$, el término objetivo $y_i$ se trata formalmente como una constante externa fija:
-\begin{equation}
-  \nabla_{\boldsymbol{\theta}} \mathcal{L}(\boldsymbol{\theta}) = -\frac{2}{B} \sum_{i=1}^B \Big( y_i - Q(s_i, a_i; \boldsymbol{\theta}) \Big) \nabla_{\boldsymbol{\theta}} Q(s_i, a_i; \boldsymbol{\theta})
-\end{equation}
-Este método se denomina \textbf{semi-gradiente} porque omite deliberadamente el efecto que $\boldsymbol{\theta}$ tendría sobre el objetivo futuro (el cual se encuentra congelado en $\boldsymbol{\theta}^-$).
+\subsection{Fase 4: El Truco Maestro del Vector Target y el Gradiente}
+Aquí surge la pregunta que desconcierta a todo principiante: \textit{«La Red Policy produce cuatro números a la salida, pero nosotros solo conocemos el resultado real de la única acción que OptiBot ejecutó. ¿Cómo entrenamos a la red sin arruinar las otras tres salidas?»}
 
-\section{Cálculo Numérico Paso a Paso: Flujo de Tensores en OptiBot}
-Para desmitificar el funcionamiento interno de una red neuronal en RL, sigamos minuciosamente el cálculo numérico para una muestra extraída del Replay Buffer de OptiBot:
+\begin{itemize}
+  \item \textbf{Paso 7: El ingenioso artificio del Vector Target ($\mathbf{y}_{\text{target}}$).}
+  Tomamos las cuatro predicciones que emitió la Red Target en el Paso~5 y \textbf{sustituimos únicamente la casilla de la acción ejecutada por el nuevo valor de Bellman $Q_{\text{target}}$}:
+  \begin{equation}
+    \label{eq:vector_target_substitution}
+    \mathbf{y}_{\text{target}} = \begin{bmatrix} y_0 \\ y_1 \\ y_2 \\ y_3 \end{bmatrix}, \quad \text{donde } 
+    y_k = \begin{cases}
+      Q_{\text{target}} & \text{si } k = a \text{ (la acción que el robot probó)} \\
+      Q(\mathbf{s}, k; \boldsymbol{\theta}_{\text{target}}) & \text{si } k \ne a \text{ (las 3 acciones no ejecutadas)}
+    \end{cases}
+  \end{equation}
+  \textbf{¿Por qué esto es pura genialidad?:} Porque al calcular el error para las otras tres acciones que no probamos, restamos lo mismo que la red predijo:
+  \[
+    \text{Error en acción no probada } k = (y_k - Q_k) = (Q_k - Q_k) = 0
+  \]
+  ¡El error en las otras tres acciones es exactamente cero! Sus perillas internas no sufren distorsiones indebidas; el 100\% de la corrección se concentra con precisión de cirujano en la acción que OptiBot puso a prueba.
+  \item \textbf{Paso 8: Entrenamiento mediante Descenso de Gradiente (MSE).}
+  Comparamos la predicción de la Red Policy con el vector target usando el Error Cuadrático Medio:
+  \begin{equation}
+    \mathcal{L}(\boldsymbol{\theta}_{\text{policy}}) = \big( Q_{\text{target}} - Q(\mathbf{s}, a; \boldsymbol{\theta}_{\text{policy}}) \big)^2
+  \end{equation}
+  Mediante retropropagación (\textit{backpropagation}), el optimizador gira suavemente las perillas $\boldsymbol{\theta}_{\text{policy}}$ de la Red Policy para que su estimación se acerque al blanco de Bellman. La Red Target ni se entera: sus perillas no se tocan (lo que en matemáticas se denomina \textit{semi-gradiente}).
+\end{itemize}
+
+\subsection{Fase 5: El Ciclo Continuo y la Sincronización Periódica}
+\begin{itemize}
+  \item \textbf{Paso 9: Repetición del bucle interactivo.} OptiBot sigue recorriendo el almacén paso a paso, llenando su álbum de vivencias y entrenando su Red Policy con cada lote aleatorio.
+  \item \textbf{Paso 10: Sincronización periódica de las perillas.} La Red Target no puede quedarse congelada para siempre, pues el robot se estancaría intentando complacer a un juez anticuado. Por ello, tras un intervalo programado (por ejemplo, cada $C = 4$ pasos de entrenamiento), descongelamos momentáneamente la Red Target y le copiamos los pesos actualizados de la Red Policy:
+  \begin{equation}
+    \boldsymbol{\theta}_{\text{target}} \leftarrow \boldsymbol{\theta}_{\text{policy}}
+  \end{equation}
+  Tras este relevo, la diana da un salto hacia adelante reflejando la nueva sabiduría de OptiBot, pero vuelve a congelarse de inmediato durante otros 4 pasos para garantizar una estabilidad matemática inquebrantable.
+\end{itemize}
+
+\begin{figure}[!htb]
+\centering
+\begin{tikzpicture}[
+  >=Stealth,
+  every node/.style={font=\sffamily},
+  agentBox/.style={rectangle, draw=TealDark, line width=1.3pt, fill=Teal!12, rounded corners=5pt, minimum width=3.3cm, minimum height=1.3cm, align=center, font=\scriptsize\bfseries},
+  bufferBox/.style={rectangle, draw=Coral, line width=1.3pt, fill=Coral!12, rounded corners=5pt, minimum width=3.5cm, minimum height=1.3cm, align=center, font=\scriptsize\bfseries},
+  netBox/.style={rectangle, draw=Leaf, line width=1.3pt, fill=Leaf!15, rounded corners=5pt, minimum width=3.3cm, minimum height=1.3cm, align=center, font=\scriptsize\bfseries},
+  targetBox/.style={rectangle, draw=Ink!70, line width=1.3pt, fill=Mist!70, rounded corners=5pt, minimum width=3.3cm, minimum height=1.3cm, align=center, font=\scriptsize\bfseries},
+  lossBox/.style={rectangle, draw=Gold!80!black, line width=1.3pt, fill=Gold!18, rounded corners=5pt, minimum width=3.6cm, minimum height=1.3cm, align=center, font=\scriptsize\bfseries}
+]
+  % -------------------------------------------------------------
+  % Nivel 1: Robot en el Almacén y Experience Replay (Bien separados)
+  % -------------------------------------------------------------
+  \node[agentBox] (env) at (1.5, 3.5) {Robot en el Almacén\\[3pt]\tiny Paso 3: Captura estado $\mathbf{s}_t$\\[1pt]\tiny Acción $a_t \implies (r, \mathbf{s}', \text{term})$};
+  \node[bufferBox] (replay) at (8.5, 3.5) {Experience Replay ($\mathcal{D}$)\\[3pt]\tiny Paso 3a: Guarda en cola FIFO\\[1pt]\tiny Paso 3b: Muestreo aleatorio};
+
+  % Flecha 1: Robot -> Experience Replay (Paso 3a) con etiqueta limpia
+  \draw[->, line width=1.2pt, draw=TealDark] (env.east) -- node[above=3pt, font=\scriptsize\bfseries\color{TealDark}, align=center] {Paso 3a: Guarda vivencia\\$(\mathbf{s}, a, r, \mathbf{s}', \text{term})$} (replay.west);
+
+  % -------------------------------------------------------------
+  % Nivel 2: Las Dos Redes Neuronales (Policy a la izq, Target a la dcha)
+  % -------------------------------------------------------------
+  \node[netBox] (policy) at (1.5, 0.4) {Red Policy ($\boldsymbol{\theta}_{\text{policy}}$)\\[3pt]\tiny Paso 4: Evalúa $\mathbf{s} \to Q(\mathbf{s}, a)$\\[1pt]\tiny \textbf{¡Red que se entrena!}};
+  \node[targetBox] (target) at (9.0, 0.4) {Red Target ($\boldsymbol{\theta}_{\text{target}}$)\\[3pt]\tiny Pasos 5 y 6: Blanco de Bellman\\[1pt]\tiny Paso 7: Fija vector target};
+
+  % Flecha 2: Replay -> Red Policy (Paso 3b)
+  \draw[->, line width=1.1pt, draw=Coral] (replay.south west) -- ++(0, -0.8) -| node[above, pos=0.32, font=\scriptsize\bfseries\color{Coral}] {Paso 3b: Estado actual $\mathbf{s}$} (policy.north);
+
+  % Flecha 3: Replay -> Red Target (Paso 6)
+  \draw[->, line width=1.1pt, draw=Coral] (replay.south east) -- ++(0, -0.8) -| node[above, pos=0.32, font=\scriptsize\bfseries\color{Coral}] {Paso 6: Siguiente estado $\mathbf{s}'$} (target.north);
+
+  % Flecha 4: Sincronización periódica directa entre Policy y Target (despejada)
+  \draw[->, line width=1.2pt, draw=Ink!70, dashed] (policy.east) -- node[fill=white, draw=Mist!90, rounded corners=3pt, inner sep=3pt, font=\tiny\bfseries\color{Ink}, align=center] {Sincronización periódica\\$\boldsymbol{\theta}_{\text{target}} \leftarrow \boldsymbol{\theta}_{\text{policy}}$ (cada $C$ pasos)} (target.west);
+
+  % -------------------------------------------------------------
+  % Nivel 3: Función de Pérdida (MSE)
+  % -------------------------------------------------------------
+  \node[lossBox] (loss) at (5.25, -2.1) {Función de Pérdida (MSE)\\[3pt]\tiny Paso 8: Error $(y - Q)^2$\\[1pt]\tiny Ajuste de perillas $\boldsymbol{\theta}_{\text{policy}}$};
+
+  % Flecha 5: Red Policy -> Función de Pérdida
+  \draw[->, line width=1.2pt, draw=Leaf] (policy.south) -- (1.5, -2.1) -- node[above=2pt, font=\scriptsize\bfseries\color{Leaf}, pos=0.45] {Predicción $Q(\mathbf{s}, a)$} (loss.west);
+
+  % Flecha 6: Red Target -> Función de Pérdida
+  \draw[->, line width=1.2pt, draw=Ink!70] (target.south) -- (9.0, -2.1) -- node[above=2pt, font=\scriptsize\bfseries\color{Ink!70}, pos=0.45] {Vector Target $\mathbf{y}$} (loss.east);
+
+  % Flecha 7: Retropropagación (Paso 8: Descenso de gradiente) con carril inferior amplio
+  \draw[->, line width=1.3pt, draw=Gold!80!black, dashed] 
+    (loss.south) -- (5.25, -3.4) 
+    -- node[below=3pt, font=\scriptsize\bfseries\color{Gold!80!black}, pos=0.5] {Paso 8: Descenso de gradiente $\nabla_{\boldsymbol{\theta}_{\text{policy}}}$ (Ajuste de perillas)} 
+    (-1.2, -3.4) -- (-1.2, 0.4) -- (policy.west);
+
+\end{tikzpicture}
+\caption{Ciclo interactivo del algoritmo Deep Q-Learning (DQN). El robot interactúa con el almacén continuo y empaqueta sus transiciones en el búfer de repetición de experiencias. Para entrenar de forma descorrelacionada, se extrae un lote aleatorio: la \textbf{Red Policy} evalúa el estado actual $\mathbf{s}$ para obtener su predicción, mientras que la \textbf{Red Target congelada} evalúa el siguiente estado $\mathbf{s}'$ para computar el blanco inmutable de Bellman y conformar el vector target sustituyendo la acción ejecutada. La discrepancia cuadrática entrena exclusivamente a la Red Policy. Periódicamente (cada $C$ pasos), las perillas aprendidas se transfieren a la Red Target.}
+\label{fig:dqn_flow}
+\end{figure}
+
+\begin{table}[!htb]
+\centering
+\small
+\begin{tabular}{c >{\raggedright\arraybackslash}p{4.0cm} >{\raggedright\arraybackslash}p{3.2cm} >{\raggedright\arraybackslash}p{5.2cm}}
+  \toprule
+  \textbf{Paso} & \textbf{Acción del Algoritmo} & \textbf{Componente Activo} & \textbf{Significado en OptiBot} \\
+  \midrule
+  \textbf{1} & Creación con pesos aleatorios & Red Policy ($\boldsymbol{\theta}_{\text{policy}}$) & Inicializa perillas al azar sin conocer el almacén. \\
+  \addlinespace
+  \textbf{2} & Clonación inicial idéntica & Red Target ($\boldsymbol{\theta}_{\text{target}}$) & Copia exacta $\boldsymbol{\theta}_{\text{target}} \leftarrow \boldsymbol{\theta}_{\text{policy}}$ congelada en memoria. \\
+  \addlinespace
+  \textbf{3} & Medición sensorial y acción & Sensores continuos & Mide posición continua $[x, y, \Delta x, \Delta y]^T$ y se mueve. \\
+  \addlinespace
+  \textbf{3a} & Inserción en Experience Replay & Cola FIFO ($\mathcal{D}$) & Guarda la vivencia $(\mathbf{s}, a, r, \mathbf{s}', \text{term})$ en el álbum. \\
+  \addlinespace
+  \textbf{3b} & Muestreo aleatorio de lote & Muestreador de memoria & Extrae recuerdos al azar para romper la correlación temporal. \\
+  \addlinespace
+  \textbf{4} & Propagación hacia adelante & Red Policy & Predice las 4 notas cardinales $(\uparrow, \downarrow, \rightarrow, \leftarrow)$ para $\mathbf{s}$. \\
+  \addlinespace
+  \textbf{5} & Propagación del mismo estado & Red Target & Emite la plantilla base de predicciones para $\mathbf{s}$. \\
+  \addlinespace
+  \textbf{6} & Cómputo del blanco de Bellman & Red Target congelada & Calcula la meta fija: $Q = r + \gamma \max Q(\mathbf{s}')$ (o $r$ si es terminal). \\
+  \addlinespace
+  \textbf{7} & Sustitución en Vector Target & Vector $\mathbf{y}_{\text{target}}$ & Reemplaza únicamente el índice de la acción $a$ por $Q_{\text{target}}$. \\
+  \addlinespace
+  \textbf{8} & Entrenamiento por gradiente & Optimizador (MSE) & Gira las perillas de la Red Policy hacia la diana fija. \\
+  \addlinespace
+  \textbf{9} & Repetición del ciclo interactivo & Bucle de navegación & Vuelve al Paso 3 para seguir explorando y aprendiendo. \\
+  \addlinespace
+  \textbf{10} & Sincronización periódica & Copia de parámetros & Actualiza la Red Target $\boldsymbol{\theta}_{\text{target}} \leftarrow \boldsymbol{\theta}_{\text{policy}}$ cada $C$ pasos. \\
+  \bottomrule
+\end{tabular}
+\caption{Resumen sinóptico de los 10 pasos fundamentales de Deep Q-Learning (DQN).}
+\label{tab:dql_steps_summary}
+\end{table}
+
+\section{Cómo Aprende la Red: Función de Pérdida y Descenso de Gradiente}
+Con el vector objetivo establecido gracias a la Red Target, el entrenamiento de la Red Policy se convierte en un proceso de calibración continua: comparar lo que la red predijo contra la evidencia real recolectada y ajustar sus perillas internas para reducir el margen de error.
+
+\subsection{La Función de Pérdida: Midiendo la Sorpresa del Robot}
+Para que la red aprenda, primero necesitamos una brújula matemática que cuantifique qué tan equivocadas estuvieron sus predicciones respecto a la meta fijada por Bellman. A esta medida de discrepancia la llamamos \textbf{función de pérdida} (o costo), y se basa en el principio del \textbf{error cuadrático}:
+
+\begin{itemize}
+  \item \textbf{Calcular la brecha:} Tomamos la nota que la Red Policy le dio a la acción antes de ejecutarla y la comparamos con el valor objetivo que calculó la Red Target tras observar el resultado real.
+  \item \textbf{Elevar al cuadrado:} Multiplicamos la diferencia por sí misma. Esto cumple dos propósitos fundamentales sin necesidad de fórmulas complicadas:
+  \begin{enumerate}
+    \item Hace que cualquier error sea siempre positivo (tanto si el robot fue demasiado optimista como si fue demasiado pesimista, equivocarse siempre cuenta como error).
+    \item Castiga con mucha mayor severidad las equivocaciones garrafales que los pequeños desajustes milimétricos, obligando a la red a corregir primero sus fallos más peligrosos.
+  \end{enumerate}
+  \item \textbf{Promediar sobre el lote:} En lugar de reaccionar de forma impulsiva a un solo recuerdo, calculamos el error promedio sobre las decenas de vivencias barajadas del lote. De esta manera, el aprendizaje es suave, estable y representativo de todo el almacén.
+\end{itemize}
+
+\subsection{¿Por qué la sustitución aísla el error en la acción tomada?}
+Aquí reside uno de los conceptos más ingeniosos de DQN: la red tiene cuatro salidas simultáneas (Norte, Sur, Este y Oeste), pero en cada instante OptiBot solo puede moverse en una dirección. Si el robot avanzó hacia el Este, ¿cómo podemos evaluar a la red sin distorsionar lo que opina sobre las otras tres rutas que no probó?
+
+\begin{itemize}
+  \item \textbf{La analogía del restaurante:} Si vas a cenar y pides pasta, al terminar la velada puedes opinar con certeza sobre el sabor de la pasta. Pero sería un disparate cambiar de opinión sobre el pescado o la sopa, porque simplemente no los probaste.
+  \item \textbf{El truco del camuflaje:} En la plantilla del vector objetivo, dejamos para las acciones no ejecutadas exactamente el mismo número que la red ya había predicho. Al comparar la predicción contra el objetivo, la diferencia en esas acciones no probadas es exactamente cero.
+  \item \textbf{Enfoque quirúrgico:} Como el error en las otras tres direcciones es nulo, el algoritmo no altera las perillas asociadas a ellas. Toda la fuerza de corrección se concentra exclusivamente en la acción que el robot experimentó en carne propia.
+\end{itemize}
+
+\subsection{El Enfoque del Descenso de Gradiente y el Semi-Gradiente}
+Una vez que conocemos la magnitud del error, ¿cómo sabe el robot hacia dónde girar sus miles de perillas internas?
+
+\begin{itemize}
+  \item \textbf{Descenso de gradiente (caminar en la niebla):} Imaginemos a una persona bajando una montaña empinada en medio de una niebla espesa que no le permite ver la cima ni el valle. Para descender hacia el punto más bajo (el menor error posible), palpa la inclinación del terreno con los pies y da un paso corto en la dirección de mayor descenso. Eso es exactamente el descenso de gradiente: la red evalúa hacia dónde se inclina el error y gira ligeramente cada perilla interna en la dirección que lo reduce.
+  \item \textbf{¿Qué significa semi-gradiente?:} En el cálculo convencional, si una meta cambia a medida que te mueves, tendrías que calcular cómo tus movimientos afectan a la propia meta. Pero aquí entra la genialidad de la Red Target: sus perillas están congeladas en el tiempo. La tratamos simplemente como un cartel con un número fijo anotado en la pared. El optimizador solo mueve las perillas de la Red Policy para alcanzar esa cifra estática, sin preocuparse por derivar ni alterar la diana durante el disparo.
+\end{itemize}
+
+\section{Cálculo Numérico Paso a Paso: Los 10 Pasos de DQN en OptiBot}
+Para ver cómo opera la matemática con absoluta nitidez, sigamos una vivencia real de OptiBot en el almacén continuo, desglosando los 10 pasos con números exactos.
 
 \begin{calculomanual}
-Considérese una transición extraída aleatoriamente de la memoria de repetición con hiperparámetros: factor de descuento $\gamma = 0.95$ y tasa de aprendizaje $\eta = 0.001$.
+Consideremos el entorno continuo del almacén de $3 \times 3$ metros con factor de descuento $\gamma = 0.95$ y tasa de aprendizaje $\eta = 0.001$.
 
-\textbf{Datos de la transición extraída:}
+\subsubsection*{Pasos 1 y 2: Arquitectura y pesos iniciales de las dos redes}
+Se inicializa la \textbf{Red Policy} ($\boldsymbol{\theta}_{\text{policy}}$) con perillas aleatorias y se clona para crear la \textbf{Red Target} ($\boldsymbol{\theta}_{\text{target}}$). Ambas redes tienen 4 entradas continuas y 4 salidas cardinales:
+\[
+  \mathcal{A} = \{0:\text{Norte } (\uparrow), \, 1:\text{Sur } (\downarrow), \, 2:\text{Este } (\rightarrow), \, 3:\text{Oeste } (\leftarrow)\}
+\]
+
+\subsubsection*{Paso 3, 3a y 3b: Medición sensorial, Álbum de Recuerdos y Muestreo}
+OptiBot se ubica en el Muelle de Carga ($S_1$) y mide su vector continuo:
+\[
+  \mathbf{s} = [0.55\text{ m}, \, 2.45\text{ m}, \, +1.95\text{ m}, \, -1.95\text{ m}]^T
+\]
+El robot ejecuta la acción $a = 2$ (\textit{Este} $\rightarrow$, iniciando el avance hacia el pasillo despejado). El entorno físico devuelve:
 \begin{itemize}
-  \item Estado inicial continuo: $\mathbf{s} = [1.20\text{ m}, \, 85.0\%, \, 1.50\text{ m/s}, \, 0.10\text{ rad}]^T$.
-  \item Acción ejecutada en ese instante: $a = 0$ (\textit{Avanzar}).
-  \item Recompensa recibida del entorno: $r = +1.50$.
-  \item Estado sucesor alcanzado: $\mathbf{s}' = [0.80\text{ m}, \, 84.8\%, \, 1.60\text{ m/s}, \, 0.05\text{ rad}]^T$.
-  \item Bandera de episodio terminal: $\text{terminado} = \text{Falso}$ ($0$).
+  \item Recompensa inmediata recibida: $r = -1.00$ (costo por tiempo de paso).
+  \item Nuevo estado continuo alcanzado: $\mathbf{s}' = [1.02\text{ m}, \, 2.44\text{ m}, \, +1.48\text{ m}, \, -1.94\text{ m}]^T$.
+  \item Fin de episodio: $\text{terminal} = \text{Falso}$ ($0$).
 \end{itemize}
+En el \textbf{Paso 3a}, la experiencia $(\mathbf{s}, a=2, r=-1.00, \mathbf{s}', \text{terminal}=0)$ se guarda en el Experience Replay. En el \textbf{Paso 3b}, el muestreador extrae esta experiencia para entrenar.
 
-\textbf{Paso 1: Paso hacia adelante en la Red Target con $\mathbf{s}'$}
-El vector de estado futuro $\mathbf{s}'$ se propaga por la red congelada $Q(\cdot; \boldsymbol{\theta}^-)$, obteniéndose las siguientes predicciones para cada acción admisible:
+\subsubsection*{Paso 4: Propagación en la Red Policy y predicción de salida}
+El vector de estado $\mathbf{s}$ entra por la capa de entrada de la Red Policy. Sus neuronas de salida emiten los siguientes valores de recompensa esperada:
 \begin{center}
-\small\setlength{\tabcolsep}{4pt}
+\small\setlength{\tabcolsep}{6pt}
 \begin{tabular}{ccccc}
   \toprule
-  Acción & $a'=0$ (Avanzar) & $a'=1$ (GirarIzq) & $a'=2$ (GirarDer) & $a'=3$ (Frenar) \\
+  Acción & $0$ (Norte $\uparrow$) & $1$ (Sur $\downarrow$) & $2$ (Este $\rightarrow$) & $3$ (Oeste $\leftarrow$) \\
   \midrule
-  $Q(\mathbf{s}', a'; \boldsymbol{\theta}^-)$ & $4.20$ & $6.50$ & $3.80$ & $1.10$ \\
+  $Q(\mathbf{s}, a; \boldsymbol{\theta}_{\text{policy}})$ & $2.80$ & $1.90$ & $\mathbf{3.10}$ & $1.40$ \\
   \bottomrule
 \end{tabular}
 \end{center}
-La mejor opción futura predicha por la red target es $a'=1$ con valor:
+La predicción que la red tenía para la acción ejecutada ($a=2$, Este) era $Q(\mathbf{s}, a=2; \boldsymbol{\theta}_{\text{policy}}) = \mathbf{3.100}$.
+
+\subsubsection*{Paso 5: Propagación en la Red Target con el mismo vector de estado}
+El vector de estado $\mathbf{s}$ entra a la Red Target congelada, emitiendo la plantilla base de salida:
 \[
-  \max_{a' \in \mathcal{A}} Q(\mathbf{s}', a'; \boldsymbol{\theta}^-) = \mathbf{6.50}
+  Q(\mathbf{s}, \cdot; \boldsymbol{\theta}_{\text{target}}) = [2.80, \, 1.90, \, 3.10, \, 1.40]
 \]
 
-\textbf{Paso 2: Cómputo del Objetivo Bellman Congelado ($y$)}
-Aplicando la ecuación~(\ref{eq:dqn_target}):
+\subsubsection*{Paso 6: Cálculo del valor objetivo de Bellman ($Q_{\text{target}}$)}
+Para calcular cuánto valía realmente esa maniobra, introducimos el \textbf{siguiente estado alcanzado} $\mathbf{s}'$ en la Red Target congelada:
+\begin{center}
+\small\setlength{\tabcolsep}{6pt}
+\begin{tabular}{ccccc}
+  \toprule
+  Acción futura & $a'=0$ (Norte) & $a'=1$ (Sur) & $a'=2$ (Este) & $a'=3$ (Oeste) \\
+  \midrule
+  $Q(\mathbf{s}', a'; \boldsymbol{\theta}_{\text{target}})$ & $4.20$ & $\mathbf{6.50}$ & $5.80$ & $1.10$ \\
+  \bottomrule
+\end{tabular}
+\end{center}
+La mejor opción futura predicha por la Red Target congelada es ir hacia el Sur ($a'=1$) con un valor de:
+\[
+  \max_{a' \in \mathcal{A}} Q(\mathbf{s}', a'; \boldsymbol{\theta}_{\text{target}}) = \mathbf{6.50}
+\]
+Como el estado no es terminal, aplicamos la Ecuación~(\ref{eq:bellman_q_target_step}):
+\[
+  Q_{\text{target}} = r + \gamma \max_{a'} Q(\mathbf{s}', a'; \boldsymbol{\theta}_{\text{target}}) = -1.00 + (0.95 \times 6.50) = -1.00 + 6.175 = \mathbf{5.175}
+\]
+
+\subsubsection*{Paso 7: Establecimiento del Vector Target}
+Tomamos el vector de salida que emitió la Red Target en el Paso~5, $[2.80, 1.90, 3.10, 1.40]$, y \textbf{reemplazamos la casilla de la acción tomada ($a=2$, Este)} por el valor de Bellman $Q_{\text{target}} = 5.175$:
+\[
+  \mathbf{y}_{\text{target}} = \begin{bmatrix} 2.80 \\ 1.90 \\ \mathbf{5.175} \\ 1.40 \end{bmatrix}
+\]
+Las acciones $0, 1$ y $3$ conservan sus valores originales intactos.
+
+\subsubsection*{Paso 8: Entrenamiento de la Red Policy con Descenso de Gradiente}
+Calculamos la discrepancia cuadrática entre lo que la Red Policy predijo y el vector Target:
 \begin{align*}
-  y &= r + \gamma (1 - \text{terminado}) \max_{a'} Q(\mathbf{s}', a'; \boldsymbol{\theta}^-) \\
-    &= 1.50 + (0.95 \times 1 \times 6.50) \\
-    &= 1.50 + 6.175 = \mathbf{7.675}
+  \mathcal{L} &= (2.80 - 2.80)^2 + (1.90 - 1.90)^2 + (\mathbf{5.175} - \mathbf{3.100})^2 + (1.40 - 1.40)^2 \\
+              &= 0 + 0 + (+2.075)^2 + 0 = (2.075)^2 = \mathbf{4.306}
 \end{align*}
+\textit{Interpretación clara para dummies:}
+\begin{itemize}
+  \item Para Norte, Sur y Oeste el error es exactamente $0$. Sus perillas no sufrirán ninguna alteración espuria.
+  \item Para el Este ($a=2$), la sorpresa temporal es $\delta = 5.175 - 3.100 = \mathbf{+2.075}$. ¡Una maravillosa noticia! La acción Este resultó ser $+2.075$ puntos mejor de lo que la Red Policy creía.
+  \item El algoritmo retropropaga este error de $4.306$ y gira las perillas de la Red Policy para elevar su estimación del Este hacia el blanco de $5.175$.
+  \item La Red Target continúa $100\%$ inmóvil, ofreciendo una diana fija y libre de temblores.
+\end{itemize}
 
-\textbf{Paso 3: Paso hacia adelante en la Red Online con $\mathbf{s}$}
-Se evalúa el estado inicial $\mathbf{s}$ en la red online activa $Q(\cdot; \boldsymbol{\theta})$:
+\subsubsection*{Paso 9: Bucle continuo de exploración}
+OptiBot continúa navegando en el almacén continuo, acumulando vivencias en su Experience Replay y entrenando la Red Policy paso tras paso.
+
+\subsubsection*{Paso 10: Sincronización periódica de las redes}
+Tras cumplirse $C = 4$ iteraciones de entrenamiento, las perillas aprendidas en la Red Policy se transfieren a la Red Target:
 \[
-  Q(\mathbf{s}, a=0; \boldsymbol{\theta}) = \mathbf{5.100}
+  \boldsymbol{\theta}_{\text{target}} \leftarrow \boldsymbol{\theta}_{\text{policy}}
 \]
-
-\textbf{Paso 4: Determinación del Error TD ($\delta$) y Pérdida Cuadrática}
-El error entre la predicción activa y el objetivo fijado resulta:
-\[
-  \delta = y - Q(\mathbf{s}, a=0; \boldsymbol{\theta}) = 7.675 - 5.100 = \mathbf{+2.575}
-\]
-La pérdida cuadrática correspondiente para este ejemplo es:
-\[
-  \mathcal{L} = \delta^2 = (2.575)^2 \approx \mathbf{6.63}
-\]
-
-\textbf{Paso 5: Retropropagación y Actualización de Parámetros}
-El algoritmo calcula el gradiente $\nabla_{\boldsymbol{\theta}} \mathcal{L}$ mediante diferenciación automática (\textit{Backpropagation}). El optimizador (como Adam) ajusta los pesos de la red online en dirección opuesta al gradiente, incrementando el valor de salida $Q(\mathbf{s}, a=0; \boldsymbol{\theta})$ para aproximarlo a $7.675$.
-
-Mientras tanto, los parámetros de la red target $\boldsymbol{\theta}^-$ permanecen completamente inmutables, garantizando una optimización sin oscilaciones.
+La diana da un salto de calidad reflejando la nueva maestría de OptiBot y vuelve a congelarse para la siguiente ronda de aprendizaje.
 \end{calculomanual}
 
-\section{Double DQN (DDQN): Eliminación del Sesgo de Sobreestimación}
-A pesar de su éxito, el algoritmo DQN estándar padece una imperfección matemática inherente: \textbf{el sesgo sistemático de sobreestimación} inducido por el operador $\max_{a'}$.
+\begin{ideaclave}
+\textbf{Preguntas Frecuentes para Dummies sobre Aprendizaje por Refuerzo Profundo:}
+\begin{enumerate}
+  \item \textbf{¿Cómo explora el robot si la red neuronal siempre arroja números continuos?} \\
+  Seguimos aplicando la clásica regla $\varepsilon$-greedy: con probabilidad $\varepsilon$, OptiBot ignora la red por completo y elige una de las cuatro acciones lanzando una moneda al azar. Con probabilidad $1-\varepsilon$, explota seleccionando la neurona de salida con el valor más alto ($\arg\max$).
+  \item \textbf{¿Qué ocurre cuando el Experience Replay se llena por completo?} \\
+  Funciona como una cola circular FIFO de tamaño fijo (por ejemplo, $50{,}000$ vivencias). Cuando el álbum se satura, cada nueva experiencia expulsa automáticamente al recuerdo más antiguo para dejar espacio libre.
+  \item \textbf{¿Por qué no usamos redes neuronales para todo desde el primer día?} \\
+  Porque para problemas sencillos con pocos estados discretos (como la cuadrícula simple de $3 \times 3$ casillas), las tablas tradicionales convergen con certeza matemática garantizada, se calculan en microsegundos y no requieren calibrar miles de perillas ni lidiar con aproximaciones estadísticas. Las redes neuronales son la artillería pesada que desplegamos cuando el mundo se vuelve continuo o infinitamente complejo.
+\end{enumerate}
+\end{ideaclave}
 
-En presencia de ruido estocástico o imprecisiones de aproximación de la red, la esperanza matemática del máximo entre variables aleatorias siempre es mayor o igual que el máximo de sus esperanzas:
-\begin{equation}
-  \mathbb{E} \left[ \max_{a} X_a \right] \ge \max_{a} \mathbb{E}[X_a]
-\end{equation}
-Dado que DQN utiliza el mismo conjunto de pesos $\boldsymbol{\theta}^-$ tanto para \textbf{seleccionar} cuál es la mejor acción como para \textbf{evaluar} su valor, tiende a sobreestimar sistemáticamente los valores $Q$, lo que puede degradar la política en entornos complejos.
-
-Para erradicar este problema, Hado van Hasselt et al. (2016) introdujeron **Double DQN** (DDQN), desacoplando completamente ambos roles:
-\begin{equation}
-  \label{eq:ddqn_target}
-  y_i^{\text{DDQN}} = r_i + \gamma (1 - \text{terminado}_i) Q\left( s'_i, \, \underbrace{\arg\max_{a' \in \mathcal{A}} Q(s'_i, a'; \boldsymbol{\theta})}_{\text{Selección con Red Online}}; \, \underbrace{\boldsymbol{\theta}^-}_{\text{Evaluación con Red Target}} \right)
-\end{equation}
-\begin{itemize}
-  \item La \textbf{Red Online} ($\boldsymbol{\theta}$) decide qué acción es la mejor candidata.
-  \item La \textbf{Red Target} ($\boldsymbol{\theta}^-$) calcula de manera imparcial el valor $Q$ atribuible a esa acción elegida.
-\end{itemize}
-Si una acción fue sobreestimada por azar en la red target, es improbable que la red online coincida en seleccionarla, cancelando de raíz el sesgo positivo sistemático.
-
-\section{Implementación Modular en PyTorch: OptiBot DQN}
-Para experimentar de forma interactiva con el entrenamiento de redes neuronales profundas para control por refuerzo, el código completo se encuentra disponible en el cuaderno Jupyter:
+\section{Implementación Práctica: OptiBot DQN en el Cuaderno Interactivo}
+Para experimentar en vivo con el entrenamiento de redes neuronales profundas para control por refuerzo, el código completo y ejecutable se encuentra disponible en el cuaderno interactivo del curso:
 \begin{center}
   \textbf{\texttt{notebooks/cap05\_rl\_profundo.ipynb}}
 \end{center}
-En este cuaderno interactivo se implementa la arquitectura modular en PyTorch: la red neuronal de aproximación de valor \texttt{RedQOptiBot}, el búfer de repetición de experiencias \texttt{BufferReplay} (descorrelación de muestras temporales) y el agente \texttt{AgenteDQN} integrando \textit{Double DQN} y actualización suave de pesos (\textit{Polyak averaging} con parámetro $\tau$). El cuaderno incluye bucles de entrenamiento en entornos continuos, seguimiento de la pérdida de Huber y curvas de convergencia del retorno acumulado.
+En este cuaderno interactivo se implementa el entorno continuo del almacén de OptiBot, la red neuronal de aproximación de valor, el búfer de repetición de experiencias (para descorrelacionar las vivencias temporales) y el agente completo integrando la arquitectura dual de Deep Q-Learning (DQN). El cuaderno incluye bucles de entrenamiento en coordenadas continuas, seguimiento visual de la curva de pérdida (MSE) y la animación gráfica de la trayectoria continua recorrida por el robot esquivando la estantería central hasta alcanzar con éxito la Bahía de Entrega.
 
+\pagebreak
 \section{Comparativa Global: De las Tablas a las Redes Neuronales}
 La Tabla~\ref{tab:comparativa_rl} resume la transición paradigmática recorrida a lo largo de este curso, contrastando las dos grandes eras del Aprendizaje por Refuerzo:
 
 \begin{table}[htbp]
   \centering
   \small
-  \begin{tabular}{@{}p{3.5cm}p{5.5cm}p{5.5cm}@{}}
+  \begin{tabular}{@{} >{\raggedright\arraybackslash}p{3.4cm} >{\raggedright\arraybackslash}p{5.5cm} >{\raggedright\arraybackslash}p{5.5cm}@{}}
     \toprule
     \textbf{Dimensión} & \textbf{RL Tradicional (Q-Learning)} & \textbf{RL Profundo (DQN)} \\
     \midrule
-    \textbf{Representación} & Matriz o tabla discreta $Q(s, a)$. & Red Neuronal Profunda paramétrica $Q(s, a; \boldsymbol{\theta})$. \\
+    \textbf{Representación} & Matriz o tabla discreta $Q(s, a)$. & Red Policy paramétrica $Q(\mathbf{s}, a; \boldsymbol{\theta}_{\text{policy}})$. \\
     \addlinespace
-    \textbf{Espacio de Estados} & Finito y reducido (pocos estados discretos). & Continuo, sensorial y de alta dimensionalidad ($\mathbb{R}^d$, imágenes). \\
+    \textbf{Espacio de Estados} & Finito y reducido (pocos estados discretos). & Continuo, sensorial y métrico ($\mathbb{R}^4$, distancias relativas). \\
     \addlinespace
     \textbf{Generalización} & Nula: cada celda $(s, a)$ debe visitarse de forma individual. & Total: interpola comportamientos óptimos para estados jamás observados. \\
     \addlinespace
-    \textbf{Garantías Teóricas} & Convergencia asintótica garantizada con probabilidad 1 (Watkins). & Convergencia empírica; sujeto a la Tríada Mortal si no se estabiliza. \\
+    \textbf{Garantías Teóricas} & Convergencia asintótica garantizada con probabilidad 1 (Watkins). & Convergencia empírica estabilizada mediante arquitectura dual. \\
     \addlinespace
-    \textbf{Estabilizadores Clave} & Tasa de aprendizaje decreciente $\alpha_t$ y política $\varepsilon$-greedy. & Buffer de Repetición de Experiencias y Red Objetivo Congelada. \\
+    \textbf{Estabilizadores Clave} & Tasa de aprendizaje decreciente $\alpha_t$ y política $\varepsilon$-greedy. & Experience Replay (cola FIFO) y Red Target congelada ($\boldsymbol{\theta}_{\text{target}}$). \\
     \bottomrule
   \end{tabular}
   \caption{Comparativa estructural entre el Aprendizaje por Refuerzo Tradicional y Profundo.}
@@ -234,7 +745,7 @@ La Tabla~\ref{tab:comparativa_rl} resume la transición paradigmática recorrida
 \end{table}
 
 \begin{notabox}
-\textbf{Conclusión del Curso y Perspectivas Futuras:}
+\textbf{Conclusión y Perspectivas Futuras:}
 A lo largo de este manual, hemos construido de forma progresiva, rigurosa y transparente el andamiaje completo del Aprendizaje por Refuerzo:
 \begin{itemize}
   \item Partimos de la cuantificación de la incertidumbre probabilística y los bandidos multibrazo.
